@@ -140,6 +140,9 @@ namespace CDMUtil.Context.ObjectDefinitions
         public string ProcessSubTableSuperTablesFilePath;
         public int WaitAfterEventTrigger = 60000;
 
+        //JayConsulting/JayFu/2022
+        public string targetSnowflakeDbConnectionString;
+        public string targetSnowflakeDbSchema;
 
         public AppConfigurations()
         { }

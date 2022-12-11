@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.Data.SqlClient" Version="4.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="2.2.0" />
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="150.4897.1" />
+    <PackageReference Include="Snowflake.Data" Version="2.0.19" />
   </ItemGroup>
   <ItemGroup>
     <None Update="local.settings.json">

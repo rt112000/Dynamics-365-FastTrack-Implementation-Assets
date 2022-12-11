@@ -8,6 +8,7 @@ using System.Configuration;
 using System.Collections.Specialized;
 using System.IO;
 using Microsoft.Extensions.Logging;
+using CDMUtil.Snowflake;
 
 namespace CDMUtil
 {
@@ -47,6 +48,10 @@ namespace CDMUtil
                 if (!String.IsNullOrEmpty(c.synapseOptions.targetSparkEndpoint))
                 {
                     SparkHandler.executeSpark(c, metadataList, logger);
+                }
+                else if ((!String.IsNullOrEmpty(c.targetSnowflakeDbConnectionString)))
+                {
+                    SnowflakeHandler.executeSnowflake(c, metadataList, logger);
                 }
                 else
                 {
@@ -162,6 +167,12 @@ namespace CDMUtil
 
             AppConfiguration.SourceColumnProperties = Path.Combine(Environment.CurrentDirectory, "Manifest", "SourceColumnProperties.json");
             AppConfiguration.ReplaceViewSyntax = Path.Combine(Environment.CurrentDirectory, "SQL", "ReplaceViewSyntax.json");
+
+            //JayConsulting/JayFu/2022
+            if (ConfigurationManager.AppSettings.Get("targetSnowflakeDbConnectionString") != null)
+                AppConfiguration.targetSnowflakeDbConnectionString = ConfigurationManager.AppSettings.Get("targetSnowflakeDbConnectionString");
+            if (ConfigurationManager.AppSettings.Get("targetSnowflakeDbSchema") != null)
+                AppConfiguration.targetSnowflakeDbConnectionString = ConfigurationManager.AppSettings.Get("targetSnowflakeDbSchema");
 
             return AppConfiguration;
         }

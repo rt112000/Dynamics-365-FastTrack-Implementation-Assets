@@ -1,0 +1,251 @@
+﻿// <copyright company="JayConsulting">
+// Copyright (c) 2022 All Rights Reserved
+// <author>Jay Fu</author>
+// https://github.com/snowflakedb/snowflake-connector-net
+// </copyright>
+
+using CDMUtil.Context.ObjectDefinitions;
+using System.Collections.Generic;
+using System;
+using System.Data;
+using System.Threading.Tasks;
+using System.Linq;
+using Microsoft.Extensions.Logging;
+using Snowflake.Data.Client;
+
+namespace CDMUtil.Snowflake
+{
+    public class SnowflakeHandler
+    {
+        private string SnowflakeConnectionStr;
+        private ILogger logger;
+        private IDbConnection conn;
+        private string dbSchema;
+
+        public SnowflakeHandler(string snowflakeConnectionStr, string snowflakeSchema, ILogger logger)
+        {
+            this.SnowflakeConnectionStr = snowflakeConnectionStr;
+            this.dbSchema = snowflakeSchema;
+            this.logger = logger;
+            this.conn = new SnowflakeDbConnection();
+            this.conn.ConnectionString = this.SnowflakeConnectionStr;
+
+            this.conn.Open();
+        }
+
+        ~SnowflakeHandler()
+        {
+            if (this.conn != null && this.conn.State != ConnectionState.Closed)
+                this.conn.Close();
+        }
+
+        /// <summary>
+        /// Entry point for this class, used by the console app.
+        /// </summary>
+        /// <param name="c"></param>
+        /// <param name="metadataList"></param>
+        /// <param name="logger"></param>
+        /// <returns></returns>
+        public static SQLStatements executeSnowflake(AppConfigurations c, List<SQLMetadata> metadataList, ILogger logger)
+        {
+            // convert metadata to DDL
+            var statementsList = SnowflakeHandler.sqlMetadataToDDL(metadataList, c, logger);
+            
+            // Execute DDL
+            logger.Log(LogLevel.Information, "Executing DDL");
+            SQLStatements statements = new SQLStatements { Statements = statementsList.Result };
+
+            try
+            {
+                SnowflakeHandler handler = new SnowflakeHandler(
+                    c.targetSnowflakeDbConnectionString,
+                    c.targetSnowflakeDbSchema,
+                    logger);
+
+                // prep DB
+                var setupStatements = handler.dbSetup();
+                handler.executeStatements(setupStatements);
+                handler.executeStatements(statements);
+            }
+            catch (Exception e)
+            {
+                logger.Log(LogLevel.Error, "ERROR executing SQL");
+                foreach (var statement in statements.Statements)
+                {
+                    logger.LogError(statement.Statement);
+                }
+                logger.Log(LogLevel.Error, e.Message);
+            }
+            finally
+            {
+                ////TODO : Log stats by tables , entity , created or failed
+                //SQLHandler.missingTables(c, metadataList, log);
+            }
+            return statements;
+        }
+
+        private SQLStatements dbSetup()
+        {
+            var sqldbprep = new List<SQLStatement>();
+
+            string template = @"CREATE TRANSIENT SCHEMA IF NOT EXISTS {0}";
+            string schemaStatement = string.Format(template, this.dbSchema);
+
+            sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = schemaStatement });
+
+            return new SQLStatements { Statements = sqldbprep };
+
+        }
+
+        private void executeStatements(SQLStatements sqlStatements)
+        {
+            try
+            {
+                if(this.conn.State != ConnectionState.Open)
+                    conn.Open();
+
+                foreach (var s in sqlStatements.Statements)
+                {
+                    try
+                    {
+                        if (s.EntityName != null)
+                        {
+                            logger.LogInformation($"Executing DDL:{s.EntityName}");
+                        }
+
+                        logger.LogDebug($"Statement:{s.Statement}");
+                        this.executeStatement(s.Statement);
+
+                        logger.LogInformation($"Status:success");
+                        s.Created = true;
+                    }
+                    catch (SnowflakeDbException ex)
+                    {
+                        logger.LogError($"Statement:{s.Statement}");
+                        logger.LogError(ex.Message);
+                        logger.LogError($"Status:failed");
+                        s.Created = false;
+                        s.Detail = ex.Message;
+                    }
+                }
+            }
+            catch (SnowflakeDbException e)
+            {
+                logger.LogError($"Connection error:{ e.Message}");
+            }
+        }
+
+        public async static Task<List<SQLStatement>> sqlMetadataToDDL(List<SQLMetadata> metadataList, AppConfigurations c, ILogger logger)
+        {
+            List<SQLStatement> sqlStatements = new List<SQLStatement>();
+
+            string template = "";
+
+            template = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
+
+            logger.LogInformation($"Metadata to DDL as table");
+
+            foreach (SQLMetadata metadata in metadataList)
+            {
+                string sql = "";
+                string dataLocation = null;
+
+                if (string.IsNullOrEmpty(metadata.viewDefinition))
+                {
+                    if (metadata.columnAttributes == null || metadata.dataLocation == null)
+                    {
+                        logger.LogError($"Table/Entity: {metadata.entityName} invalid definition.");
+                        continue;
+                    }
+
+                    logger.LogInformation($"Table:{metadata.entityName}");
+                    string columnDefSQL = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToSQLType((ColumnAttribute)i)));
+
+                    sql = string.Format(template,
+                                         c.targetSnowflakeDbSchema, //0 
+                                         metadata.entityName, //1
+                                         columnDefSQL //2
+                                          );
+                    dataLocation = metadata.dataLocation;
+                }
+                else
+                {
+                    // Ignore entity for now.
+                    //logger.LogInformation($"Entity:{metadata.entityName}");
+                    //sql = TSqlSyntaxHandler.finalTsqlConversion(metadata.viewDefinition, "sql", c.synapseOptions);
+                }
+
+                if (sql != "")
+                {
+                    if (sqlStatements.Exists(x => x.EntityName.ToLower() == metadata.entityName.ToLower()))
+                        continue;
+                    else
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sql });
+                }
+            }
+
+            logger.LogInformation($"Tables:{sqlStatements.FindAll(a => a.DataLocation != null).Count}");
+            logger.LogInformation($"Entities/Views:{sqlStatements.FindAll(a => a.DataLocation == null).Count}");
+            return sqlStatements;
+        }
+
+        public static string attributeToColumnNames(ColumnAttribute attribute)
+        {
+            return $"{attribute.name}";
+        }
+
+        private void executeStatement(string query)
+        {
+            IDbCommand cmd = conn.CreateCommand();
+            cmd.CommandText = query;
+            cmd.ExecuteNonQuery();
+        }
+
+        public static string attributeToSQLType(ColumnAttribute attribute)
+        {
+            string sqlColumnDef;
+
+            switch (attribute.dataType.ToLower())
+            {
+                case "string":
+                    sqlColumnDef = $"{attribute.name} VARCHAR";
+                    break;
+                case "decimal":
+                case "double":
+                    sqlColumnDef = $"{attribute.name} ({attribute.precision} , {attribute.scale})";
+                    break;
+                case "biginteger":
+                case "int64":
+                case "bigint":
+                    sqlColumnDef = $"{attribute.name} bigInt";
+                    break;
+                case "smallinteger":
+                case "int":
+                case "int32":
+                case "time":
+                    sqlColumnDef = $"{attribute.name} int";
+                    break;
+                case "date":
+                case "datetime":
+                case "datetime2":
+                    sqlColumnDef = $"{attribute.name} TIMESTAMP_NTZ";
+                    break;
+                case "boolean":
+                    sqlColumnDef = $"{attribute.name} BOOLEAN";
+                    break;
+                case "guid":
+                    sqlColumnDef = $"{attribute.name} VARCHAR";
+                    break;
+                    case "binary":
+                    sqlColumnDef = $"{attribute.name} BINARY";
+                    break;
+
+                default:
+                    sqlColumnDef = $"{attribute.name} VARCHAR";
+                    break;
+            }
+
+            return sqlColumnDef;
+        }
+    }
+}
