@@ -17,15 +17,31 @@ namespace CDMUtil.Snowflake
 {
     public class SnowflakeHandler
     {
+        private AppConfigurations c;
         private string SnowflakeConnectionStr;
         private ILogger logger;
         private IDbConnection conn;
         private string dbSchema;
+        private string snowflakeExternalStageName;
+        private string snowflakeFileFormatName;
+        private string existingSnowflakeStorageIntegrationNameWithSchema;
+        private string azureDataLakeFileFormatName;
+        private string azureDatalakeRootFolder;
 
-        public SnowflakeHandler(string snowflakeConnectionStr, string snowflakeSchema, ILogger logger)
+        public SnowflakeHandler(AppConfigurations c, ILogger logger)
         {
-            this.SnowflakeConnectionStr = snowflakeConnectionStr;
-            this.dbSchema = snowflakeSchema;
+            this.c = c;
+            this.SnowflakeConnectionStr = c.targetSnowflakeDbConnectionString;
+            this.dbSchema = c.targetSnowflakeDbSchema;
+            this.existingSnowflakeStorageIntegrationNameWithSchema = "c.existingSnowflakeStorageIntegrationNameWithSchema"; //TOBEADDED PROPERLY;
+            this.azureDataLakeFileFormatName = "CSV";
+            this.azureDatalakeRootFolder = c.synapseOptions.location;
+            // Value would be something like dynamics365_financeandoperations_xxxx_tst_sandbox_EDS
+            this.snowflakeExternalStageName = c.synapseOptions.external_data_source;
+
+            // Value would be something like dynamics365_financeandoperations_xxxx_tst_sandbox_FF
+            this.snowflakeFileFormatName = c.synapseOptions.fileFormatName;
+
             this.logger = logger;
             this.conn = new SnowflakeDbConnection();
             this.conn.ConnectionString = this.SnowflakeConnectionStr;
@@ -48,22 +64,21 @@ namespace CDMUtil.Snowflake
         /// <returns></returns>
         public static SQLStatements executeSnowflake(AppConfigurations c, List<SQLMetadata> metadataList, ILogger logger)
         {
-            // convert metadata to DDL
-            var statementsList = SnowflakeHandler.sqlMetadataToDDL(metadataList, c, logger);
-            
-            // Execute DDL
-            logger.Log(LogLevel.Information, "Executing DDL");
-            SQLStatements statements = new SQLStatements { Statements = statementsList.Result };
-
-            try
-            {
-                SnowflakeHandler handler = new SnowflakeHandler(
-                    c.targetSnowflakeDbConnectionString,
-                    c.targetSnowflakeDbSchema,
+            SnowflakeHandler handler = new SnowflakeHandler(
+                    c,
                     logger);
 
-                // prep DB
-                var setupStatements = handler.dbSetup();
+            // prep DB
+            var setupStatements = handler.dbSetup();
+
+            // convert metadata to DDL
+            var statementsList = handler.sqlMetadataToDDL(metadataList, logger);
+            SQLStatements statements = new SQLStatements { Statements = statementsList.Result };
+
+            // Execute DDL
+            logger.Log(LogLevel.Information, "Executing DDL");
+            try
+            {
                 handler.executeStatements(setupStatements);
                 handler.executeStatements(statements);
             }
@@ -88,10 +103,30 @@ namespace CDMUtil.Snowflake
         {
             var sqldbprep = new List<SQLStatement>();
 
+            // Create schema
             string template = @"CREATE TRANSIENT SCHEMA IF NOT EXISTS {0}";
-            string schemaStatement = string.Format(template, this.dbSchema);
+            string statement = string.Format(template, this.dbSchema);
+            sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = statement });
 
-            sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = schemaStatement });
+            // Create file format
+            template = @"CREATE OR REPLACE FILE FORMAT {0}.{1} TYPE = {2}";
+            statement = string.Format(template, this.dbSchema, this.snowflakeFileFormatName, this.azureDataLakeFileFormatName);
+            sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
+
+            // Create external stage
+            template = @"CREATE OR REPLACE STAGE {0}.{1}
+                STORAGE_INTEGRATION = {2}
+                URL = {3}
+                FILE_FORMAT = {0}.{4}
+                ";
+            statement = string.Format(template,
+                this.dbSchema,
+                this.snowflakeExternalStageName,
+                this.existingSnowflakeStorageIntegrationNameWithSchema,
+                this.snowflakeExternalStageName,
+                this.snowflakeFileFormatName
+                );
+            sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
 
             return new SQLStatements { Statements = sqldbprep };
 
@@ -135,13 +170,15 @@ namespace CDMUtil.Snowflake
             }
         }
 
-        public async static Task<List<SQLStatement>> sqlMetadataToDDL(List<SQLMetadata> metadataList, AppConfigurations c, ILogger logger)
+        public async Task<List<SQLStatement>> sqlMetadataToDDL(List<SQLMetadata> metadataList, ILogger logger)
         {
             List<SQLStatement> sqlStatements = new List<SQLStatement>();
 
-            string template = "";
+            string templateCreateTable = "";
+            string templateCreateStoredProcedure = "";
 
-            template = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
+            templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
+            templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.{1} ({2})";
 
             logger.LogInformation($"Metadata to DDL as table");
 
@@ -161,8 +198,8 @@ namespace CDMUtil.Snowflake
                     logger.LogInformation($"Table:{metadata.entityName}");
                     string columnDefSQL = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToSQLType((ColumnAttribute)i)));
 
-                    sql = string.Format(template,
-                                         c.targetSnowflakeDbSchema, //0 
+                    sql = string.Format(templateCreateTable,
+                                         this.dbSchema, //0 
                                          metadata.entityName, //1
                                          columnDefSQL //2
                                           );
