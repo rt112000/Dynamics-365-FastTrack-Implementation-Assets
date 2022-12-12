@@ -33,7 +33,7 @@ namespace CDMUtil.Snowflake
             this.c = c;
             this.SnowflakeConnectionStr = c.targetSnowflakeDbConnectionString;
             this.dbSchema = c.targetSnowflakeDbSchema;
-            this.existingSnowflakeStorageIntegrationNameWithSchema = "c.existingSnowflakeStorageIntegrationNameWithSchema"; //TOBEADDED PROPERLY;
+            this.existingSnowflakeStorageIntegrationNameWithSchema = "c.existingSnowflakeStorageIntegrationNameWithSchema"; //TOBEADDED PROPERLY;",////////////////////////////////////////////////////////////
             this.azureDataLakeFileFormatName = "CSV";
             this.azureDatalakeRootFolder = c.synapseOptions.location;
             // Value would be something like dynamics365_financeandoperations_xxxx_tst_sandbox_EDS
@@ -178,14 +178,26 @@ namespace CDMUtil.Snowflake
             string templateCreateStoredProcedure = "";
 
             templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
-            templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.sp_copy_{1}";
+
+            templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.sp_copy_{1}(FORCECOPY BOOLEAN)
+RETURN TABLE NOT NULL
+LANGUAGE SQL
+AS
+BEGIN
+    COPY INTO {0}.{1}({2})
+    FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T)
+END
+";
 
             logger.LogInformation($"Metadata to DDL as table");
 
+            string sqlCreateTable, sqlCreateSproc;
+            string dataLocation;
             foreach (SQLMetadata metadata in metadataList)
             {
-                string sql = "";
-                string dataLocation = null;
+                sqlCreateTable = "";
+                sqlCreateSproc = "";
+                dataLocation = null;
 
                 if (string.IsNullOrEmpty(metadata.viewDefinition))
                 {
@@ -199,13 +211,22 @@ namespace CDMUtil.Snowflake
                     string columnDefSQL = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToSQLType((ColumnAttribute)i)));
 
                     // Add metadata columns
-                    columnDefSQL += ", METADATA_FILENAME VARCHAR, METADATA_FILE_ROW_NUMBER INT, METADATA_FILE_LOAD_DATETIME_UTC TIMESTAMP_NTZ DEFAULT SYSDATE()";
+                    columnDefSQL += ", METADATA_FILENAME VARCHAR, METADATA_FILE_ROW_NUMBER INT, ODS_LOAD_DATETIME_UTC TIMESTAMP_NTZ DEFAULT SYSDATE()";
 
-                    sql = string.Format(templateCreateTable,
-                                         this.dbSchema, //0 
-                                         metadata.entityName, //1
-                                         columnDefSQL //2
-                                          );
+                    sqlCreateTable = string.Format(templateCreateTable,
+                        this.dbSchema,
+                        metadata.entityName,
+                        columnDefSQL
+                        );
+
+                    sqlCreateSproc = string.Format(templateCreateStoredProcedure,
+                        this.dbSchema,
+                        metadata.entityName,
+                        "table columlist to do",/////////////////////////////////////////////////////////////
+                        "stage columlist to do",////////////////////////////////////////////////////////////
+                        this.snowflakeExternalStageName,
+                        metadata.dataLocation
+                        );
                     dataLocation = metadata.dataLocation;
                 }
                 else
@@ -215,12 +236,15 @@ namespace CDMUtil.Snowflake
                     //sql = TSqlSyntaxHandler.finalTsqlConversion(metadata.viewDefinition, "sql", c.synapseOptions);
                 }
 
-                if (sql != "")
+                if (sqlCreateTable != "")
                 {
                     if (sqlStatements.Exists(x => x.EntityName.ToLower() == metadata.entityName.ToLower()))
                         continue;
                     else
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sql });
+                    {
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateTable });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateSproc });
+                    }
                 }
             }
 
