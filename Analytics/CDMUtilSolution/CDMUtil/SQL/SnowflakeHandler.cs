@@ -116,7 +116,7 @@ namespace CDMUtil.Snowflake
             // Create external stage
             template = @"CREATE OR REPLACE STAGE {0}.{1}
                 STORAGE_INTEGRATION = {2}
-                URL = {3}
+                URL = '{3}'
                 FILE_FORMAT = {0}.{4}
                 ";
             statement = string.Format(template,
@@ -178,7 +178,7 @@ namespace CDMUtil.Snowflake
             string templateCreateStoredProcedure = "";
 
             templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
-            templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.{1} ({2})";
+            templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.sp_copy_{1}";
 
             logger.LogInformation($"Metadata to DDL as table");
 
@@ -197,6 +197,9 @@ namespace CDMUtil.Snowflake
 
                     logger.LogInformation($"Table:{metadata.entityName}");
                     string columnDefSQL = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToSQLType((ColumnAttribute)i)));
+
+                    // Add metadata columns
+                    columnDefSQL += ", METADATA_FILENAME VARCHAR, METADATA_FILE_ROW_NUMBER INT, METADATA_FILE_LOAD_DATETIME_UTC TIMESTAMP_NTZ DEFAULT SYSDATE()";
 
                     sql = string.Format(templateCreateTable,
                                          this.dbSchema, //0 
@@ -249,18 +252,16 @@ namespace CDMUtil.Snowflake
                     break;
                 case "decimal":
                 case "double":
-                    sqlColumnDef = $"{attribute.name} ({attribute.precision} , {attribute.scale})";
+                    sqlColumnDef = $"{attribute.name} NUMBER({attribute.precision} , {attribute.scale})";
                     break;
                 case "biginteger":
                 case "int64":
                 case "bigint":
-                    sqlColumnDef = $"{attribute.name} bigInt";
-                    break;
                 case "smallinteger":
                 case "int":
                 case "int32":
                 case "time":
-                    sqlColumnDef = $"{attribute.name} int";
+                    sqlColumnDef = $"{attribute.name} NUMBER";
                     break;
                 case "date":
                 case "datetime":
