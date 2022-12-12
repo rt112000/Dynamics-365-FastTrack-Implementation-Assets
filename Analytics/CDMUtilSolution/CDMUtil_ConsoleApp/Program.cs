@@ -169,10 +169,12 @@ namespace CDMUtil
             AppConfiguration.ReplaceViewSyntax = Path.Combine(Environment.CurrentDirectory, "SQL", "ReplaceViewSyntax.json");
 
             //JayConsulting/JayFu/2022
-            if (ConfigurationManager.AppSettings.Get("targetSnowflakeDbConnectionString") != null)
-                AppConfiguration.targetSnowflakeDbConnectionString = ConfigurationManager.AppSettings.Get("targetSnowflakeDbConnectionString");
-            if (ConfigurationManager.AppSettings.Get("targetSnowflakeDbSchema") != null)
-                AppConfiguration.targetSnowflakeDbConnectionString = ConfigurationManager.AppSettings.Get("targetSnowflakeDbSchema");
+            if (ConfigurationManager.AppSettings.Get("TargetSnowflakeDbConnectionString") != null)
+                AppConfiguration.targetSnowflakeDbConnectionString = ConfigurationManager.AppSettings.Get("TargetSnowflakeDbConnectionString");
+            if (ConfigurationManager.AppSettings.Get("TargetSnowflakeDbSchema") != null)
+                AppConfiguration.targetSnowflakeDbConnectionString = ConfigurationManager.AppSettings.Get("TargetSnowflakeDbSchema");
+            if (ConfigurationManager.AppSettings.Get("TargetSnowflakeExistingStorageIntegrationNameWithSchema") != null)
+                AppConfiguration.targetSnowflakeDbConnectionString = ConfigurationManager.AppSettings.Get("TargetSnowflakeExistingStorageIntegrationNameWithSchema");
 
             return AppConfiguration;
         }

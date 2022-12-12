@@ -143,6 +143,7 @@ namespace CDMUtil.Context.ObjectDefinitions
         //JayConsulting/JayFu/2022
         public string targetSnowflakeDbConnectionString;
         public string targetSnowflakeDbSchema;
+        public string targetSnowflakeExistingStorageIntegrationNameWithSchema;
 
         public AppConfigurations()
         { }

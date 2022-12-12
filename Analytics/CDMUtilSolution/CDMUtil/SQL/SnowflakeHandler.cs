@@ -4,6 +4,14 @@
 // https://github.com/snowflakedb/snowflake-connector-net
 // </copyright>
 
+/* TODO:
+ * 1. create view
+ * 2. sproc get table column list, get stage column list
+ * 3. create a meta table to store COPY result, and udpate sproc to insert into it.
+ * 4. create tasks
+ * 5. verify csv esape charactor and text quotes.
+ */
+
 using CDMUtil.Context.ObjectDefinitions;
 using System.Collections.Generic;
 using System;
@@ -21,10 +29,10 @@ namespace CDMUtil.Snowflake
         private string SnowflakeConnectionStr;
         private ILogger logger;
         private IDbConnection conn;
-        private string dbSchema;
+        private string snowflakeDBSchema;
         private string snowflakeExternalStageName;
         private string snowflakeFileFormatName;
-        private string existingSnowflakeStorageIntegrationNameWithSchema;
+        private string snowflakeExistingStorageIntegrationNameWithSchema;
         private string azureDataLakeFileFormatName;
         private string azureDatalakeRootFolder;
 
@@ -32,8 +40,8 @@ namespace CDMUtil.Snowflake
         {
             this.c = c;
             this.SnowflakeConnectionStr = c.targetSnowflakeDbConnectionString;
-            this.dbSchema = c.targetSnowflakeDbSchema;
-            this.existingSnowflakeStorageIntegrationNameWithSchema = "c.existingSnowflakeStorageIntegrationNameWithSchema"; //TOBEADDED PROPERLY;",////////////////////////////////////////////////////////////
+            this.snowflakeDBSchema = c.targetSnowflakeDbSchema;
+            this.snowflakeExistingStorageIntegrationNameWithSchema = c.targetSnowflakeExistingStorageIntegrationNameWithSchema;
             this.azureDataLakeFileFormatName = "CSV";
             this.azureDatalakeRootFolder = c.synapseOptions.location;
             // Value would be something like dynamics365_financeandoperations_xxxx_tst_sandbox_EDS
@@ -105,12 +113,12 @@ namespace CDMUtil.Snowflake
 
             // Create schema
             string template = @"CREATE TRANSIENT SCHEMA IF NOT EXISTS {0}";
-            string statement = string.Format(template, this.dbSchema);
+            string statement = string.Format(template, this.snowflakeDBSchema);
             sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = statement });
 
             // Create file format
             template = @"CREATE OR REPLACE FILE FORMAT {0}.{1} TYPE = {2}";
-            statement = string.Format(template, this.dbSchema, this.snowflakeFileFormatName, this.azureDataLakeFileFormatName);
+            statement = string.Format(template, this.snowflakeDBSchema, this.snowflakeFileFormatName, this.azureDataLakeFileFormatName);
             sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
 
             // Create external stage
@@ -120,9 +128,9 @@ namespace CDMUtil.Snowflake
                 FILE_FORMAT = {0}.{4}
                 ";
             statement = string.Format(template,
-                this.dbSchema,
+                this.snowflakeDBSchema,
                 this.snowflakeExternalStageName,
-                this.existingSnowflakeStorageIntegrationNameWithSchema,
+                this.snowflakeExistingStorageIntegrationNameWithSchema,
                 this.azureDatalakeRootFolder.Replace("https", "azure"),
                 this.snowflakeFileFormatName
                 );
@@ -185,7 +193,8 @@ LANGUAGE SQL
 AS
 BEGIN
     COPY INTO {0}.{1}({2})
-    FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T)
+    FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T);
+    RETURN TABLE(RESULT_SCAN(LAST_QUERY_ID()));
 END
 ";
 
@@ -209,21 +218,30 @@ END
 
                     logger.LogInformation($"Table:{metadata.entityName}");
                     string columnDefSQL = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToSQLType((ColumnAttribute)i)));
+                    string columnNames = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToColumnNames((ColumnAttribute)i)));
+                    string columnNamesSnowfalkeStage = "";
+                    for(int i = 1; i <= metadata.columnAttributes.Count; i++)
+                    {
+                        columnNamesSnowfalkeStage += "$" + i.ToString();
+                        if (i < metadata.columnAttributes.Count)
+                            columnNamesSnowfalkeStage += ", ";
+                    }
 
                     // Add metadata columns
                     columnDefSQL += ", METADATA_FILENAME VARCHAR, METADATA_FILE_ROW_NUMBER INT, ODS_LOAD_DATETIME_UTC TIMESTAMP_NTZ DEFAULT SYSDATE()";
+                    columnNames += ", METADATA_FILENAME, METADATA_FILE_ROW_NUMBER";
 
                     sqlCreateTable = string.Format(templateCreateTable,
-                        this.dbSchema,
+                        this.snowflakeDBSchema,
                         metadata.entityName,
                         columnDefSQL
                         );
 
                     sqlCreateSproc = string.Format(templateCreateStoredProcedure,
-                        this.dbSchema,
+                        this.snowflakeDBSchema,
                         metadata.entityName,
-                        "table columlist to do",/////////////////////////////////////////////////////////////
-                        "stage columlist to do",////////////////////////////////////////////////////////////
+                        columnNames,
+                        columnNamesSnowfalkeStage,
                         this.snowflakeExternalStageName,
                         metadata.dataLocation
                         );
