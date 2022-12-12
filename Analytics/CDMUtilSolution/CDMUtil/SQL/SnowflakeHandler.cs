@@ -123,7 +123,7 @@ namespace CDMUtil.Snowflake
                 this.dbSchema,
                 this.snowflakeExternalStageName,
                 this.existingSnowflakeStorageIntegrationNameWithSchema,
-                this.snowflakeExternalStageName,
+                this.azureDatalakeRootFolder.Replace("https", "azure"),
                 this.snowflakeFileFormatName
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
