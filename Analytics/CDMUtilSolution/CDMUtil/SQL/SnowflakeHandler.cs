@@ -281,11 +281,11 @@ ALTER TASK {0}.{1} RESUME;
                 {
                     if (metadata.columnAttributes == null || metadata.dataLocation == null)
                     {
-                        logger.LogError($"Table/Entity: {metadata.entityName} invalid definition.");
+                        logger.LogError($"Table/Entity: {metadata.entityName.ToUpper()} invalid definition.");
                         continue;
                     }
 
-                    logger.LogInformation($"Table:{metadata.entityName}");
+                    logger.LogInformation($"Table:{metadata.entityName.ToUpper()}");
                     string columnDefSQL = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToSQLType((ColumnAttribute)i)));
                     string columnNames = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToColumnNames((ColumnAttribute)i)));
                     string columnNamesSnowfalkeStage = "";
@@ -303,14 +303,14 @@ ALTER TASK {0}.{1} RESUME;
                     // Create table
                     sqlCreateTable = string.Format(templateCreateTable,
                         this.snowflakeDBSchema,                                 //0 schema
-                        metadata.entityName,                                    //1 table name
+                        metadata.entityName.ToUpper(),                                    //1 table name
                         columnDefSQL                                            //3 column def
                         );
 
                     // Create sproc
                     sqlCreateSproc = string.Format(templateCreateStoredProcedure,
                         this.snowflakeDBSchema,                                 //0 schema
-                        "SP_COPY_" + metadata.entityName,                       //1 procedure name
+                        "SP_COPY_" + metadata.entityName.ToUpper(),                       //1 procedure name
                         columnNames,                                            //2 table columns
                         columnNamesSnowfalkeStage,                              //3 Snowflake stage columns, e.g. $1, $2 etc...
                         this.snowflakeExternalStageName,                        //4 Snowflake stage
@@ -321,24 +321,24 @@ ALTER TASK {0}.{1} RESUME;
                     // Create view
                     sqlCreateView = string.Format(templateCreateView,
                         this.snowflakeDBSchema,                                 //0 schema
-                        metadata.entityName + "_VW",                            //1 view name
-                        metadata.entityName                                     //2 table name
+                        metadata.entityName.ToUpper() + "_VW",                            //1 view name
+                        metadata.entityName.ToUpper()                                     //2 table name
                         );
 
                     // Create task
                     sqlCreateTask = string.Format(templateCreateTask,
                         this.snowflakeDBSchema,                                 //0 schema
-                        "TK_COPY_" + metadata.entityName,                       //1 task name
+                        "TK_COPY_" + metadata.entityName.ToUpper(),                       //1 task name
                         SnowflakeHandler.snowflakeMainTaskName,                 //2 parent task
-                       "SP_COPY_" + metadata.entityName,                        //3 procedure name
+                       "SP_COPY_" + metadata.entityName.ToUpper(),                        //3 procedure name
                         "FALSE"                                                 //4 FORCE option for the procedure
                         );
 
                     sqlCreateTaskForce = string.Format(templateCreateTask,
                         this.snowflakeDBSchema,
-                        "TK_COPY_" + metadata.entityName + "_" + snowflakeNameFullReloadString,
+                        "TK_COPY_" + metadata.entityName.ToUpper() + "_" + snowflakeNameFullReloadString,
                         SnowflakeHandler.snowflakeMainTaskFullReloadName,
-                        "SP_COPY_" + metadata.entityName,
+                        "SP_COPY_" + metadata.entityName.ToUpper(),
                         "TRUE"
                         );
 
@@ -347,21 +347,21 @@ ALTER TASK {0}.{1} RESUME;
                 else
                 {
                     // Ignore entity for now.
-                    //logger.LogInformation($"Entity:{metadata.entityName}");
+                    //logger.LogInformation($"Entity:{metadata.entityName.ToUpper()}");
                     //sql = TSqlSyntaxHandler.finalTsqlConversion(metadata.viewDefinition, "sql", c.synapseOptions);
                 }
 
                 if (sqlCreateTable != "")
                 {
-                    if (sqlStatements.Exists(x => x.EntityName.ToLower() == metadata.entityName.ToLower()))
+                    if (sqlStatements.Exists(x => x.EntityName.ToLower() == metadata.entityName.ToUpper().ToLower()))
                         continue;
                     else
                     {
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateTable });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateSproc });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateView });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateTask });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateTaskForce });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateTable });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateSproc });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateView });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateTask });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateTaskForce });
                     }
                 }
             }
@@ -373,7 +373,7 @@ ALTER TASK {0}.{1} RESUME;
 
         public static string attributeToColumnNames(ColumnAttribute attribute)
         {
-            return $"{attribute.name}";
+            return $"{attribute.name.ToUpper()}";
         }
 
         public static string attributeToSQLType(ColumnAttribute attribute)
@@ -420,7 +420,7 @@ ALTER TASK {0}.{1} RESUME;
 
             sqlColumnDef += $" COMMENT '{attribute.description}'";
 
-            return sqlColumnDef;
+            return sqlColumnDef.ToUpper();
         }
     }
 }
