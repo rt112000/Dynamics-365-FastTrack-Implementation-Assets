@@ -42,7 +42,7 @@ namespace CDMUtil.Snowflake
             this.SnowflakeConnectionStr = c.targetSnowflakeDbConnectionString;
             this.snowflakeDBSchema = c.targetSnowflakeDbSchema;
             this.snowflakeExistingStorageIntegrationNameWithSchema = c.targetSnowflakeExistingStorageIntegrationNameWithSchema;
-            this.azureDataLakeFileFormatName = c.synapseOptions.fileFormatName;
+            this.azureDataLakeFileFormatName = "CSV";
             this.azureDatalakeRootFolder = c.synapseOptions.location;
             // Value would be something like dynamics365_financeandoperations_xxxx_tst_sandbox_EDS
             this.snowflakeExternalStageName = c.synapseOptions.external_data_source;
@@ -117,8 +117,12 @@ namespace CDMUtil.Snowflake
             sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = statement });
 
             // Create file format
-            template = @"CREATE OR REPLACE FILE FORMAT {0}.{1} TYPE = {2}";
-            statement = string.Format(template, this.snowflakeDBSchema, this.snowflakeFileFormatName, this.azureDataLakeFileFormatName);
+            template = @"CREATE OR REPLACE FILE FORMAT {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ENCODING='UTF-8'";
+            statement = string.Format(template,
+                this.snowflakeDBSchema,
+                this.snowflakeFileFormatName,
+                this.azureDataLakeFileFormatName
+                );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
 
             // Create external stage
@@ -176,6 +180,13 @@ namespace CDMUtil.Snowflake
             {
                 logger.LogError($"Connection error:{ e.Message}");
             }
+        }
+
+        private void executeStatement(string query)
+        {
+            IDbCommand cmd = conn.CreateCommand();
+            cmd.CommandText = query;
+            cmd.ExecuteNonQuery();
         }
 
         public async Task<List<SQLStatement>> sqlMetadataToDDL(List<SQLMetadata> metadataList, ILogger logger)
@@ -289,13 +300,6 @@ WHERE ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME D
         public static string attributeToColumnNames(ColumnAttribute attribute)
         {
             return $"{attribute.name}";
-        }
-
-        private void executeStatement(string query)
-        {
-            IDbCommand cmd = conn.CreateCommand();
-            cmd.CommandText = query;
-            cmd.ExecuteNonQuery();
         }
 
         public static string attributeToSQLType(ColumnAttribute attribute)
