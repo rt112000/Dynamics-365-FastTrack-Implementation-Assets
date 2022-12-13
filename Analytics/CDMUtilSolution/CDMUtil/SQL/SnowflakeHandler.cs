@@ -8,8 +8,9 @@
  * 1. DONE create view DONE.
  * 2. DONE sproc get table column list, get stage column list.
  * 3. create a meta table to store COPY result, and udpate sproc to insert into it.
- * 4. create tasks
- * 5. verify csv esape charactor and text quotes.
+ * 4. DONE create tasks.
+ * 4a.resume table tasks
+ * 5. DONE verify csv esape charactor and text quotes.
  */
 
 using CDMUtil.Context.ObjectDefinitions;
@@ -30,9 +31,11 @@ namespace CDMUtil.Snowflake
         private ILogger logger;
         private IDbConnection conn;
         private string snowflakeDBSchema;
+        private string snowflakeWarehouse;
         private string snowflakeExternalStageName;
         private string snowflakeFileFormatName;
         private string snowflakeExistingStorageIntegrationNameWithSchema;
+        private const string snowflakeMainTaskName = "TK_COPY_MAIN";
         private string azureDataLakeFileFormatName;
         private string azureDatalakeRootFolder;
 
@@ -41,6 +44,7 @@ namespace CDMUtil.Snowflake
             this.c = c;
             this.SnowflakeConnectionStr = c.targetSnowflakeDbConnectionString;
             this.snowflakeDBSchema = c.targetSnowflakeDbSchema;
+            this.snowflakeWarehouse = c.targetSnowflakeWarehouse;
             this.snowflakeExistingStorageIntegrationNameWithSchema = c.targetSnowflakeExistingStorageIntegrationNameWithSchema;
             this.azureDataLakeFileFormatName = "CSV";
             this.azureDatalakeRootFolder = c.synapseOptions.location;
@@ -140,6 +144,18 @@ namespace CDMUtil.Snowflake
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
 
+            // Create main task
+            template = @"CREATE OR REPLACE TASK {0}.{1}
+WAREHOUSE = {2}
+AS
+SELECT CURRENT_TIMESTAMP;";
+            statement = string.Format(template,
+                this.snowflakeDBSchema,
+                SnowflakeHandler.snowflakeMainTaskName,
+                this.snowflakeWarehouse
+                );
+            sqldbprep.Add(new SQLStatement { EntityName = "CreateMainTask", Statement = statement });
+
             return new SQLStatements { Statements = sqldbprep };
 
         }
@@ -196,10 +212,11 @@ namespace CDMUtil.Snowflake
             string templateCreateTable = "";
             string templateCreateStoredProcedure = "";
             string templateCreateView = "";
+            string templateCreateTask = "";
 
             templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
 
-            templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.sp_copy_{1}(FORCECOPY BOOLEAN)
+            templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.SP_COPY_{1}(FORCECOPY BOOLEAN)
 RETURN TABLE NOT NULL
 LANGUAGE SQL
 AS
@@ -209,20 +226,30 @@ BEGIN
     RETURN TABLE(RESULT_SCAN(LAST_QUERY_ID()));
 END
 ";
-            templateCreateView = @"CREATE OR REPLACE VIEW {0}.{1}_VW AS 
+
+            templateCreateView = @"CREATE OR REPLACE VIEW {0}.{1}_VW
+AS
 SELECT *
 FROM {0}.{1}
 WHERE ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME DESC) = 1;
 ";
+
+            // Task run after the main task.
+            templateCreateTask = @"CREATE OR REPLACE TASK {0}.TK_COPY_{1}
+AFTER {2}
+AS 
+CALL {0}.SP_COPY_{1}({3});
+";
             logger.LogInformation($"Metadata to DDL as table");
 
-            string sqlCreateTable, sqlCreateSproc, sqlCreateView;
+            string sqlCreateTable, sqlCreateSproc, sqlCreateView, sqlCreateTask;
             string dataLocation;
             foreach (SQLMetadata metadata in metadataList)
             {
                 sqlCreateTable = "";
                 sqlCreateSproc = "";
                 sqlCreateView = "";
+                sqlCreateTask = "";
                 dataLocation = null;
 
                 if (string.IsNullOrEmpty(metadata.viewDefinition))
@@ -271,6 +298,15 @@ WHERE ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME D
                         metadata.entityName
                         );
                     dataLocation = metadata.dataLocation;
+
+                    // Create task
+                    sqlCreateTask = string.Format(templateCreateTask,
+                        this.snowflakeDBSchema,
+                        metadata.entityName,
+                        SnowflakeHandler.snowflakeMainTaskName,
+                        "FALSE"
+                        );
+                    dataLocation = metadata.dataLocation;
                 }
                 else
                 {
@@ -288,6 +324,7 @@ WHERE ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME D
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateTable });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateSproc });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateView });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateTask });
                     }
                 }
             }
