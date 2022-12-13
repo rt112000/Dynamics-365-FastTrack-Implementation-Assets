@@ -5,8 +5,8 @@
 // </copyright>
 
 /* TODO:
- * 1. create view
- * 2. sproc get table column list, get stage column list
+ * 1. DONE create view DONE.
+ * 2. DONE sproc get table column list, get stage column list.
  * 3. create a meta table to store COPY result, and udpate sproc to insert into it.
  * 4. create tasks
  * 5. verify csv esape charactor and text quotes.
@@ -42,7 +42,7 @@ namespace CDMUtil.Snowflake
             this.SnowflakeConnectionStr = c.targetSnowflakeDbConnectionString;
             this.snowflakeDBSchema = c.targetSnowflakeDbSchema;
             this.snowflakeExistingStorageIntegrationNameWithSchema = c.targetSnowflakeExistingStorageIntegrationNameWithSchema;
-            this.azureDataLakeFileFormatName = "CSV";
+            this.azureDataLakeFileFormatName = c.synapseOptions.fileFormatName;
             this.azureDatalakeRootFolder = c.synapseOptions.location;
             // Value would be something like dynamics365_financeandoperations_xxxx_tst_sandbox_EDS
             this.snowflakeExternalStageName = c.synapseOptions.external_data_source;
@@ -255,7 +255,7 @@ WHERE ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME D
                         );
 
                     // Create view
-                    sqlCreateView = string.Format(templateCreateStoredProcedure,
+                    sqlCreateView = string.Format(templateCreateView,
                         this.snowflakeDBSchema,
                         metadata.entityName
                         );
