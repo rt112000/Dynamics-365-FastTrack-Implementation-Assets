@@ -9,8 +9,9 @@
  * 2. DONE sproc get table column list, get stage column list.
  * 3. create a meta table to store COPY result, and udpate sproc to insert into it.
  * 4. DONE create tasks.
- * 4a.resume table tasks
+ * 4a.DONE resume table tasks. MAIN TASK SHOULD BE RESUMED MANUALLY IN SNOWFLAKE.
  * 5. DONE verify csv esape charactor and text quotes.
+ * 6. DONE create full reload tasks.
  */
 
 using CDMUtil.Context.ObjectDefinitions;
@@ -36,6 +37,8 @@ namespace CDMUtil.Snowflake
         private string snowflakeFileFormatName;
         private string snowflakeExistingStorageIntegrationNameWithSchema;
         private const string snowflakeMainTaskName = "TK_COPY_MAIN";
+        private const string snowflakeNameFullReloadString = "FULL_RELOAD";
+        private const string snowflakeMainTaskFullReloadName = snowflakeMainTaskName + "_" + snowflakeNameFullReloadString; // with force option in the copy commands.
         private string azureDataLakeFileFormatName;
         private string azureDatalakeRootFolder;
 
@@ -145,6 +148,8 @@ namespace CDMUtil.Snowflake
             sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
 
             // Create main task
+            // PLEASE RESUME THE TASK MANUALLY IN SNOWFLAKE !!!!!!!!!!
+            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             template = @"CREATE OR REPLACE TASK {0}.{1}
 WAREHOUSE = {2}
 AS
@@ -155,6 +160,14 @@ SELECT CURRENT_TIMESTAMP;";
                 this.snowflakeWarehouse
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateMainTask", Statement = statement });
+
+            // task with force copy option
+            statement = string.Format(template,
+                this.snowflakeDBSchema,
+                SnowflakeHandler.snowflakeMainTaskFullReloadName,
+                this.snowflakeWarehouse
+                );
+            sqldbprep.Add(new SQLStatement { EntityName = "CreateMainTaskFullReload", Statement = statement });
 
             return new SQLStatements { Statements = sqldbprep };
 
@@ -216,33 +229,44 @@ SELECT CURRENT_TIMESTAMP;";
 
             templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
 
-            templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.SP_COPY_{1}(FORCECOPY BOOLEAN)
+            templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.{1}({6} BOOLEAN)
 RETURN TABLE NOT NULL
 LANGUAGE SQL
 AS
 BEGIN
-    COPY INTO {0}.{1}({2})
-    FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T);
+    IF ({6} = TRUE) THEN
+        TRUNCATE TABLE {0}.{1};
+        COPY INTO {0}.{1}({2})
+        FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T)
+        FORCE=TRUE;
+    ELSE
+        COPY INTO {0}.{1}({2})
+        FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T)
+    END IF
+
     RETURN TABLE(RESULT_SCAN(LAST_QUERY_ID()));
 END
 ";
 
-            templateCreateView = @"CREATE OR REPLACE VIEW {0}.{1}_VW
+            templateCreateView = @"CREATE OR REPLACE VIEW {0}.{1}
 AS
 SELECT *
-FROM {0}.{1}
+FROM {0}.{2}
 WHERE ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME DESC) = 1;
 ";
 
             // Task run after the main task.
-            templateCreateTask = @"CREATE OR REPLACE TASK {0}.TK_COPY_{1}
+            templateCreateTask = @"CREATE OR REPLACE TASK {0}.{1}
 AFTER {2}
 AS 
-CALL {0}.SP_COPY_{1}({3});
+CALL {0}.{3}({4});
+
+ALTER TASK {0}.{1} RESUME;
 ";
+
             logger.LogInformation($"Metadata to DDL as table");
 
-            string sqlCreateTable, sqlCreateSproc, sqlCreateView, sqlCreateTask;
+            string sqlCreateTable, sqlCreateSproc, sqlCreateView, sqlCreateTask, sqlCreateTaskForce;
             string dataLocation;
             foreach (SQLMetadata metadata in metadataList)
             {
@@ -250,6 +274,7 @@ CALL {0}.SP_COPY_{1}({3});
                 sqlCreateSproc = "";
                 sqlCreateView = "";
                 sqlCreateTask = "";
+                sqlCreateTaskForce = "";
                 dataLocation = null;
 
                 if (string.IsNullOrEmpty(metadata.viewDefinition))
@@ -277,35 +302,46 @@ CALL {0}.SP_COPY_{1}({3});
 
                     // Create table
                     sqlCreateTable = string.Format(templateCreateTable,
-                        this.snowflakeDBSchema,
-                        metadata.entityName,
-                        columnDefSQL
+                        this.snowflakeDBSchema,                                 //0 schema
+                        metadata.entityName,                                    //1 table name
+                        columnDefSQL                                            //3 column def
                         );
 
                     // Create sproc
                     sqlCreateSproc = string.Format(templateCreateStoredProcedure,
-                        this.snowflakeDBSchema,
-                        metadata.entityName,
-                        columnNames,
-                        columnNamesSnowfalkeStage,
-                        this.snowflakeExternalStageName,
-                        metadata.dataLocation
+                        this.snowflakeDBSchema,                                 //0 schema
+                        "SP_COPY_" + metadata.entityName,                       //1 procedure name
+                        columnNames,                                            //2 table columns
+                        columnNamesSnowfalkeStage,                              //3 Snowflake stage columns, e.g. $1, $2 etc...
+                        this.snowflakeExternalStageName,                        //4 Snowflake stage
+                        metadata.dataLocation,                                  //5 Azure location for the data files
+                        SnowflakeHandler.snowflakeNameFullReloadString          //6 object name suffix, FULL_RELOAD
                         );
 
                     // Create view
                     sqlCreateView = string.Format(templateCreateView,
-                        this.snowflakeDBSchema,
-                        metadata.entityName
+                        this.snowflakeDBSchema,                                 //0 schema
+                        metadata.entityName + "_VW",                            //1 view name
+                        metadata.entityName                                     //2 table name
                         );
-                    dataLocation = metadata.dataLocation;
 
                     // Create task
                     sqlCreateTask = string.Format(templateCreateTask,
-                        this.snowflakeDBSchema,
-                        metadata.entityName,
-                        SnowflakeHandler.snowflakeMainTaskName,
-                        "FALSE"
+                        this.snowflakeDBSchema,                                 //0 schema
+                        "TK_COPY_" + metadata.entityName,                       //1 task name
+                        SnowflakeHandler.snowflakeMainTaskName,                 //2 parent task
+                       "SP_COPY_" + metadata.entityName,                        //3 procedure name
+                        "FALSE"                                                 //4 FORCE option for the procedure
                         );
+
+                    sqlCreateTaskForce = string.Format(templateCreateTask,
+                        this.snowflakeDBSchema,
+                        "TK_COPY_" + metadata.entityName + "_" + snowflakeNameFullReloadString,
+                        SnowflakeHandler.snowflakeMainTaskFullReloadName,
+                        "SP_COPY_" + metadata.entityName,
+                        "TRUE"
+                        );
+
                     dataLocation = metadata.dataLocation;
                 }
                 else
@@ -325,6 +361,7 @@ CALL {0}.SP_COPY_{1}({3});
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateSproc });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateView });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateTask });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateTaskForce });
                     }
                 }
             }
