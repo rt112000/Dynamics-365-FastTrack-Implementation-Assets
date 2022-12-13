@@ -117,7 +117,7 @@ namespace CDMUtil.Snowflake
             sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = statement });
 
             // Create file format
-            template = @"CREATE OR REPLACE FILE FORMAT {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ENCODING='UTF-8'";
+            template = @"CREATE OR REPLACE FILE FORMAT {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ESCAPE='""' ENCODING='UTF-8'";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 this.snowflakeFileFormatName,
@@ -343,6 +343,8 @@ WHERE ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME D
                     sqlColumnDef = $"{attribute.name} VARCHAR";
                     break;
             }
+
+            sqlColumnDef += $" COMMENT '{attribute.description}'";
 
             return sqlColumnDef;
         }
