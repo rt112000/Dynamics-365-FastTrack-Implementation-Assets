@@ -184,6 +184,7 @@ namespace CDMUtil.Snowflake
 
             string templateCreateTable = "";
             string templateCreateStoredProcedure = "";
+            string templateCreateView = "";
 
             templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
 
@@ -197,15 +198,20 @@ BEGIN
     RETURN TABLE(RESULT_SCAN(LAST_QUERY_ID()));
 END
 ";
-
+            templateCreateView = @"CREATE OR REPLACE VIEW {0}.{1}_VW AS 
+SELECT *
+FROM {0}.{1}
+WHERE ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME DESC) = 1;
+";
             logger.LogInformation($"Metadata to DDL as table");
 
-            string sqlCreateTable, sqlCreateSproc;
+            string sqlCreateTable, sqlCreateSproc, sqlCreateView;
             string dataLocation;
             foreach (SQLMetadata metadata in metadataList)
             {
                 sqlCreateTable = "";
                 sqlCreateSproc = "";
+                sqlCreateView = "";
                 dataLocation = null;
 
                 if (string.IsNullOrEmpty(metadata.viewDefinition))
@@ -231,12 +237,14 @@ END
                     columnDefSQL += ", METADATA_FILENAME VARCHAR, METADATA_FILE_ROW_NUMBER INT, ODS_LOAD_DATETIME_UTC TIMESTAMP_NTZ DEFAULT SYSDATE()";
                     columnNames += ", METADATA_FILENAME, METADATA_FILE_ROW_NUMBER";
 
+                    // Create table
                     sqlCreateTable = string.Format(templateCreateTable,
                         this.snowflakeDBSchema,
                         metadata.entityName,
                         columnDefSQL
                         );
 
+                    // Create sproc
                     sqlCreateSproc = string.Format(templateCreateStoredProcedure,
                         this.snowflakeDBSchema,
                         metadata.entityName,
@@ -244,6 +252,12 @@ END
                         columnNamesSnowfalkeStage,
                         this.snowflakeExternalStageName,
                         metadata.dataLocation
+                        );
+
+                    // Create view
+                    sqlCreateView = string.Format(templateCreateStoredProcedure,
+                        this.snowflakeDBSchema,
+                        metadata.entityName
                         );
                     dataLocation = metadata.dataLocation;
                 }
@@ -262,6 +276,7 @@ END
                     {
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateTable });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateSproc });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName, DataLocation = dataLocation, Statement = sqlCreateView });
                     }
                 }
             }
