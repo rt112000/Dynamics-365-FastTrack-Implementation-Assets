@@ -12,6 +12,7 @@
  * 4a.DONE resume table tasks. MAIN TASK SHOULD BE RESUMED MANUALLY IN SNOWFLAKE.
  * 5. DONE verify csv esape charactor and text quotes.
  * 6. DONE create full reload tasks.
+ * 7. DONE add columns for enum label in tables.
  */
 
 using CDMUtil.Context.ObjectDefinitions;
@@ -250,9 +251,9 @@ END
 
             templateCreateView = @"CREATE OR REPLACE VIEW {0}.{1}
 AS
-SELECT *
-FROM {0}.{2}
-WHERE ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME DESC) = 1;
+SELECT {2}
+FROM {0}.{3}
+QUALIFY ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME DESC) = 1;
 ";
 
             // Task run after the main task.
@@ -288,6 +289,7 @@ ALTER TASK {0}.{1} RESUME;
                     logger.LogInformation($"Table:{metadata.entityName.ToUpper()}");
                     string columnDefSQL = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToSQLType((ColumnAttribute)i)));
                     string columnNames = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToColumnNames((ColumnAttribute)i)));
+                    string columnNamesView = string.Join(", ", metadata.columnAttributes.Select(i => SnowflakeHandler.attributeToViewColumnNames((ColumnAttribute)i)));
                     string columnNamesSnowfalkeStage = "";
                     for(int i = 1; i <= metadata.columnAttributes.Count; i++)
                     {
@@ -299,18 +301,19 @@ ALTER TASK {0}.{1} RESUME;
                     // Add metadata columns
                     columnDefSQL += ", METADATA_FILENAME VARCHAR, METADATA_FILE_ROW_NUMBER INT, ODS_LOAD_DATETIME_UTC TIMESTAMP_NTZ DEFAULT SYSDATE()";
                     columnNames += ", METADATA_FILENAME, METADATA_FILE_ROW_NUMBER";
+                    columnNamesView += ", METADATA_FILENAME, METADATA_FILE_ROW_NUMBER, ODS_LOAD_DATETIME_UTC";
 
                     // Create table
                     sqlCreateTable = string.Format(templateCreateTable,
                         this.snowflakeDBSchema,                                 //0 schema
-                        metadata.entityName.ToUpper(),                                    //1 table name
+                        metadata.entityName.ToUpper(),                          //1 table name
                         columnDefSQL                                            //3 column def
                         );
 
                     // Create sproc
                     sqlCreateSproc = string.Format(templateCreateStoredProcedure,
                         this.snowflakeDBSchema,                                 //0 schema
-                        "SP_COPY_" + metadata.entityName.ToUpper(),                       //1 procedure name
+                        "SP_COPY_" + metadata.entityName.ToUpper(),             //1 procedure name
                         columnNames,                                            //2 table columns
                         columnNamesSnowfalkeStage,                              //3 Snowflake stage columns, e.g. $1, $2 etc...
                         this.snowflakeExternalStageName,                        //4 Snowflake stage
@@ -321,16 +324,17 @@ ALTER TASK {0}.{1} RESUME;
                     // Create view
                     sqlCreateView = string.Format(templateCreateView,
                         this.snowflakeDBSchema,                                 //0 schema
-                        metadata.entityName.ToUpper() + "_VW",                            //1 view name
-                        metadata.entityName.ToUpper()                                     //2 table name
+                        metadata.entityName.ToUpper() + "_VW",                  //1 view name
+                        columnNamesView,                                        //2 view column names
+                        metadata.entityName.ToUpper()                           //2 table name
                         );
 
                     // Create task
                     sqlCreateTask = string.Format(templateCreateTask,
                         this.snowflakeDBSchema,                                 //0 schema
-                        "TK_COPY_" + metadata.entityName.ToUpper(),                       //1 task name
+                        "TK_COPY_" + metadata.entityName.ToUpper(),             //1 task name
                         SnowflakeHandler.snowflakeMainTaskName,                 //2 parent task
-                       "SP_COPY_" + metadata.entityName.ToUpper(),                        //3 procedure name
+                       "SP_COPY_" + metadata.entityName.ToUpper(),              //3 procedure name
                         "FALSE"                                                 //4 FORCE option for the procedure
                         );
 
@@ -374,6 +378,67 @@ ALTER TASK {0}.{1} RESUME;
         public static string attributeToColumnNames(ColumnAttribute attribute)
         {
             return $"{attribute.name.ToUpper()}";
+        }
+
+        public static string attributeToViewColumnNames(ColumnAttribute attribute)
+        {
+            string sqlColumnNames = "";
+            string attributeNameModified;
+            string dataTypeDefault;
+
+            if (attribute.isNullable == false)
+            {
+                switch (attribute.dataType.ToLower())
+                {
+                    case "string":
+                        dataTypeDefault = "''";
+                        break;
+                    case "decimal":
+                    case "double":
+                    case "biginteger":
+                    case "int64":
+                    case "bigint":
+                    case "smallinteger":
+                    case "int":
+                    case "int32":
+                    case "time":
+                    case "boolean":
+                        dataTypeDefault = "0";
+                        break;
+                    case "date":
+                    case "datetime":
+                    case "datetime2":
+                        dataTypeDefault = "'1900-01-01'";
+                        break;
+                    case "guid":
+                        dataTypeDefault = "'00000000-0000-0000-0000-000000000000'";
+                        break;
+                    default:
+                        dataTypeDefault = "''";
+                        break;
+                }
+
+                attributeNameModified = $"NULLIF({attribute.name.ToUpper()},{dataTypeDefault}) AS {attribute.name.ToUpper()}";
+            }
+            else
+            {
+                attributeNameModified = attribute.name.ToUpper();
+            }
+
+            // Add Enum translation
+            if (attribute.dataType.ToLower() == "int32"
+                && attribute.constantValueList != null)
+            {
+                var constantValues = attribute.constantValueList.ConstantValues;
+                sqlColumnNames += $"{attributeNameModified}, CASE {attribute.name}";
+                foreach (var constantValueList in constantValues)
+                {
+                    sqlColumnNames += $"{ " WHEN " + constantValueList[3] + " THEN '" + constantValueList[2]}'";
+                }
+                sqlColumnNames += $" END AS {attribute.name}_LABEL";
+            }
+
+            return sqlColumnNames;
         }
 
         public static string attributeToSQLType(ColumnAttribute attribute)
