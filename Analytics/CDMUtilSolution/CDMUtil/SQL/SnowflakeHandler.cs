@@ -386,7 +386,9 @@ ALTER TASK {0}.{1} RESUME;
             string attributeNameModified;
             string dataTypeDefault;
 
-            if (attribute.isNullable == false)
+            //if (attribute.isNullable == false)
+            // Casting default value to NULL for non-enum fields
+            if (attribute.constantValueList == null)
             {
                 switch (attribute.dataType.ToLower())
                 {
@@ -448,7 +450,14 @@ ALTER TASK {0}.{1} RESUME;
             switch (attribute.dataType.ToLower())
             {
                 case "string":
-                    sqlColumnDef = $"{attribute.name} VARCHAR";
+                    if (attribute.maximumLength == -1)
+                    {
+                        sqlColumnDef = $"{attribute.name} VARCHAR";
+                    }
+                    else
+                    {
+                        sqlColumnDef = $"{attribute.name} VARCHAR({attribute.maximumLength})";
+                    }
                     break;
                 case "decimal":
                 case "double":
@@ -477,9 +486,8 @@ ALTER TASK {0}.{1} RESUME;
                     case "binary":
                     sqlColumnDef = $"{attribute.name} BINARY";
                     break;
-
                 default:
-                    sqlColumnDef = $"{attribute.name} VARCHAR";
+                    sqlColumnDef = $"{attribute.name} VARCHAR({attribute.maximumLength})";
                     break;
             }
 
