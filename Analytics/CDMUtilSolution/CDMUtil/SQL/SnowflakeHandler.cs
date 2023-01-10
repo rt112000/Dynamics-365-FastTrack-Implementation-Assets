@@ -125,7 +125,7 @@ namespace CDMUtil.Snowflake
             sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = statement });
 
             // Create file format
-            template = @"CREATE OR REPLACE FILE FORMAT {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ESCAPE='""' ENCODING='UTF-8'";
+            template = @"CREATE FILE FORMAT IF NOT EXISTS {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ESCAPE='""' ENCODING='UTF-8'";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 this.snowflakeFileFormatName,
@@ -134,7 +134,7 @@ namespace CDMUtil.Snowflake
             sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
 
             // Create external stage
-            template = @"CREATE OR REPLACE STAGE {0}.{1}
+            template = @"CREATE STAGE IF NOT EXISTS {0}.{1}
                 STORAGE_INTEGRATION = {2}
                 URL = '{3}'
                 FILE_FORMAT = {0}.{4}
@@ -151,7 +151,7 @@ namespace CDMUtil.Snowflake
             // Create main task
             // PLEASE RESUME THE TASK MANUALLY IN SNOWFLAKE !!!!!!!!!!
             // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            template = @"CREATE OR REPLACE TASK {0}.{1}
+            template = @"CREATE TASK IF NOT EXISTS {0}.{1}
 WAREHOUSE = {2}
 AS
 SELECT CURRENT_TIMESTAMP;";
