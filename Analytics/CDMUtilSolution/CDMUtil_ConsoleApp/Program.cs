@@ -21,7 +21,7 @@ namespace CDMUtil
                   builder.AddSimpleConsole(options =>
                   {
                       options.IncludeScopes = false;
-                      options.SingleLine = true;
+                      options.SingleLine = false;
                       options.TimestampFormat = "hh:mm:ss ";
                   }));
 
