@@ -131,7 +131,7 @@ namespace CDMUtil.Snowflake
             sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = statement });
 
             // Create file format
-            template = @"CREATE FILE FORMAT IF NOT EXISTS {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ESCAPE='""' ENCODING='UTF-8'";
+            template = @"CREATE FILE FORMAT IF NOT EXISTS {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ENCODING='UTF-8'";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 this.snowflakeFileFormatName,
@@ -149,7 +149,7 @@ namespace CDMUtil.Snowflake
                 this.snowflakeDBSchema,
                 this.snowflakeExternalStageName,
                 this.snowflakeExistingStorageIntegrationNameWithSchema,
-                this.azureDatalakeRootFolder.Replace("https", "azure"),
+                this.azureDatalakeRootFolder.Replace("HTTPS", "AZURE"),
                 this.snowflakeFileFormatName
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
