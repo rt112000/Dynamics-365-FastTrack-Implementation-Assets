@@ -54,12 +54,12 @@ namespace CDMUtil.Snowflake
             this.snowflakeWarehouse = c.targetSnowflakeWarehouse;
             this.snowflakeExistingStorageIntegrationNameWithSchema = c.targetSnowflakeExistingStorageIntegrationNameWithSchema;
             this.azureDataLakeFileFormatName = "CSV";
-            this.azureDatalakeRootFolder = c.synapseOptions.location;
+            this.azureDatalakeRootFolder = c.synapseOptions.location.ToUpper();
             // Value would be something like dynamics365_financeandoperations_xxxx_tst_sandbox_EDS
-            this.snowflakeExternalStageName = c.synapseOptions.external_data_source;
+            this.snowflakeExternalStageName = c.synapseOptions.external_data_source.ToUpper();
 
             // Value would be something like dynamics365_financeandoperations_xxxx_tst_sandbox_FF
-            this.snowflakeFileFormatName = c.synapseOptions.fileFormatName;
+            this.snowflakeFileFormatName = c.synapseOptions.fileFormatName.ToUpper();
 
             this.logger = logger;
             if (this.snowflakeDryRun == false)
@@ -137,7 +137,7 @@ namespace CDMUtil.Snowflake
                 this.snowflakeFileFormatName,
                 this.azureDataLakeFileFormatName
                 );
-            sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
+            sqldbprep.Add(new SQLStatement { EntityName = "CreateFileFormat", Statement = statement });
 
             // Create external stage
             template = @"CREATE STAGE IF NOT EXISTS {0}.{1}
@@ -196,13 +196,19 @@ SELECT CURRENT_TIMESTAMP;";
                             logger.LogInformation($"Executing DDL:{s.EntityName}");
                         }
 
-                        logger.LogInformation($"Statement:{s.Statement}");
-                        if(this.snowflakeDryRun == false)
-                        { 
+                        if (this.snowflakeDryRun == false)
+                        {
+                            logger.LogDebug($"Statement:{s.Statement}");
                             this.executeStatement(s.Statement);
+                        }
+                        else
+                        {
+                            logger.LogInformation($"Statement:{s.Statement}"); 
                         }
 
                         logger.LogInformation($"Status:success");
+
+
                         s.Created = true;
                     }
                     catch (SnowflakeDbException ex)
@@ -245,12 +251,12 @@ LANGUAGE SQL
 AS
 BEGIN
     IF ({6} = TRUE) THEN
-        TRUNCATE TABLE {0}.{1};
-        COPY INTO {0}.{1}({2})
+        TRUNCATE TABLE {0}.{7};
+        COPY INTO {0}.{7}({2})
         FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T)
         FORCE=TRUE;
     ELSE
-        COPY INTO {0}.{1}({2})
+        COPY INTO {0}.{7}({2})
         FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T)
     END IF
 
@@ -327,7 +333,8 @@ ALTER TASK {0}.{1} RESUME;
                         columnNamesSnowfalkeStage,                              //3 Snowflake stage columns, e.g. $1, $2 etc...
                         this.snowflakeExternalStageName,                        //4 Snowflake stage
                         metadata.dataLocation,                                  //5 Azure location for the data files
-                        SnowflakeHandler.snowflakeNameFullReloadString          //6 object name suffix, FULL_RELOAD
+                        SnowflakeHandler.snowflakeNameFullReloadString,         //6 object name suffix, FULL_RELOAD
+                        metadata.entityName.ToUpper()                           //7 table name
                         );
 
                     // Create view
@@ -370,11 +377,11 @@ ALTER TASK {0}.{1} RESUME;
                         continue;
                     else
                     {
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateTable });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateSproc });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateView });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateTask });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper(), DataLocation = dataLocation, Statement = sqlCreateTaskForce });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Table", DataLocation = dataLocation, Statement = sqlCreateTable });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Procedure", DataLocation = dataLocation, Statement = sqlCreateSproc });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create View", DataLocation = dataLocation, Statement = sqlCreateView });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Task", DataLocation = dataLocation, Statement = sqlCreateTask });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Forced Task", DataLocation = dataLocation, Statement = sqlCreateTaskForce });
                     }
                 }
             }
@@ -397,7 +404,7 @@ ALTER TASK {0}.{1} RESUME;
 
             //if (attribute.isNullable == false)
             // Casting default value to NULL for non-enum fields
-            if (attribute.constantValueList == null)
+            if (attribute.isNullable == false)
             {
                 switch (attribute.dataType.ToLower())
                 {
@@ -429,7 +436,7 @@ ALTER TASK {0}.{1} RESUME;
                         break;
                 }
 
-                attributeNameModified = $"NULLIF({attribute.name.ToUpper()},{dataTypeDefault}) AS {attribute.name.ToUpper()}";
+                attributeNameModified = $"COALESCE({attribute.name.ToUpper()}, {dataTypeDefault}) AS {attribute.name.ToUpper()}";
             }
             else
             {
@@ -447,6 +454,10 @@ ALTER TASK {0}.{1} RESUME;
                     sqlColumnNames += $"{ " WHEN " + constantValueList[3] + " THEN '" + constantValueList[2]}'";
                 }
                 sqlColumnNames += $" END AS {attribute.name}_LABEL";
+            }
+            else
+            {
+                sqlColumnNames = $"{attributeNameModified}";
             }
 
             return sqlColumnNames;
