@@ -145,6 +145,7 @@ namespace CDMUtil.Context.ObjectDefinitions
         public string targetSnowflakeDbSchema;
         public string targetSnowflakeWarehouse;
         public string targetSnowflakeExistingStorageIntegrationNameWithSchema;
+        public string targetSnowflakeDryRun;
 
         public AppConfigurations()
         { }

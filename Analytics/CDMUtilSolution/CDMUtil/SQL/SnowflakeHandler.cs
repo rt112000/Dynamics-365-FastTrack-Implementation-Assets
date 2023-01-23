@@ -48,7 +48,7 @@ namespace CDMUtil.Snowflake
         {
             this.c = c;
 
-            this.snowflakeDryRun = true;
+            this.snowflakeDryRun = Convert.ToBoolean(c.targetSnowflakeDryRun);
             this.SnowflakeConnectionStr = c.targetSnowflakeDbConnectionString;
             this.snowflakeDBSchema = c.targetSnowflakeDbSchema;
             this.snowflakeWarehouse = c.targetSnowflakeWarehouse;
