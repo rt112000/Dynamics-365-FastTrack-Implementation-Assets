@@ -246,9 +246,10 @@ SELECT CURRENT_TIMESTAMP;";
             templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
 
             templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.{1}({6} BOOLEAN)
-RETURN TABLE NOT NULL
+RETURNS INTEGER
 LANGUAGE SQL
 AS
+DECLARE ROW_COUNT INTEGER := 0;
 BEGIN
     IF ({6} = TRUE) THEN
         TRUNCATE TABLE {0}.{7};
@@ -257,10 +258,11 @@ BEGIN
         FORCE=TRUE;
     ELSE
         COPY INTO {0}.{7}({2})
-        FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T)
-    END IF
+        FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T);
+    END IF;
 
-    RETURN TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+    SELECT COUNT(1) INTO :ROW_COUNT FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+    RETURN ROW_COUNT;
 END
 ";
 
@@ -272,7 +274,7 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME
 ";
 
             // Task run after the main task.
-            templateCreateTask = @"CREATE OR REPLACE TASK {0}.{1}
+            templateCreateTask = @"CREATE OR REPLACE TASK {0}.{1} WAREHOUSE = {5}
 AFTER {2}
 AS 
 CALL {0}.{3}({4});
@@ -351,7 +353,8 @@ ALTER TASK {0}.{1} RESUME;
                         "TK_COPY_" + metadata.entityName.ToUpper(),             //1 task name
                         SnowflakeHandler.snowflakeMainTaskName,                 //2 parent task
                        "SP_COPY_" + metadata.entityName.ToUpper(),              //3 procedure name
-                        "FALSE"                                                 //4 FORCE option for the procedure
+                        "FALSE",                                                //4 FORCE option for the procedure
+                        this.snowflakeWarehouse                                 //5 Snowflake warehouse
                         );
 
                     sqlCreateTaskForce = string.Format(templateCreateTask,
@@ -359,7 +362,8 @@ ALTER TASK {0}.{1} RESUME;
                         "TK_COPY_" + metadata.entityName.ToUpper() + "_" + snowflakeNameFullReloadString,
                         SnowflakeHandler.snowflakeMainTaskFullReloadName,
                         "SP_COPY_" + metadata.entityName.ToUpper(),
-                        "TRUE"
+                        "TRUE",
+                        this.snowflakeWarehouse
                         );
 
                     dataLocation = metadata.dataLocation;
