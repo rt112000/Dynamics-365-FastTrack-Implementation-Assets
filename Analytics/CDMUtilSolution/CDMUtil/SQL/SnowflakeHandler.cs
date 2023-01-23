@@ -32,6 +32,7 @@ namespace CDMUtil.Snowflake
         private string SnowflakeConnectionStr;
         private ILogger logger;
         private IDbConnection conn;
+        private bool snowflakeDryRun; //Log the Snowflake statement only without execution.
         private string snowflakeDBSchema;
         private string snowflakeWarehouse;
         private string snowflakeExternalStageName;
@@ -46,6 +47,8 @@ namespace CDMUtil.Snowflake
         public SnowflakeHandler(AppConfigurations c, ILogger logger)
         {
             this.c = c;
+
+            this.snowflakeDryRun = true;
             this.SnowflakeConnectionStr = c.targetSnowflakeDbConnectionString;
             this.snowflakeDBSchema = c.targetSnowflakeDbSchema;
             this.snowflakeWarehouse = c.targetSnowflakeWarehouse;
@@ -59,10 +62,13 @@ namespace CDMUtil.Snowflake
             this.snowflakeFileFormatName = c.synapseOptions.fileFormatName;
 
             this.logger = logger;
-            this.conn = new SnowflakeDbConnection();
-            this.conn.ConnectionString = this.SnowflakeConnectionStr;
+            if (this.snowflakeDryRun == false)
+            {
+                this.conn = new SnowflakeDbConnection();
+                this.conn.ConnectionString = this.SnowflakeConnectionStr;
 
-            this.conn.Open();
+                this.conn.Open();
+            }
         }
 
         ~SnowflakeHandler()
@@ -178,7 +184,7 @@ SELECT CURRENT_TIMESTAMP;";
         {
             try
             {
-                if(this.conn.State != ConnectionState.Open)
+                if(this.conn != null && this.conn.State != ConnectionState.Open && this.snowflakeDryRun == false)
                     conn.Open();
 
                 foreach (var s in sqlStatements.Statements)
@@ -190,8 +196,11 @@ SELECT CURRENT_TIMESTAMP;";
                             logger.LogInformation($"Executing DDL:{s.EntityName}");
                         }
 
-                        logger.LogDebug($"Statement:{s.Statement}");
-                        this.executeStatement(s.Statement);
+                        logger.LogInformation($"Statement:{s.Statement}");
+                        if(this.snowflakeDryRun == false)
+                        { 
+                            this.executeStatement(s.Statement);
+                        }
 
                         logger.LogInformation($"Status:success");
                         s.Created = true;
