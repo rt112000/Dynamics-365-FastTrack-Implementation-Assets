@@ -242,6 +242,7 @@ SELECT CURRENT_TIMESTAMP;";
             string templateCreateStoredProcedure = "";
             string templateCreateView = "";
             string templateCreateTask = "";
+            string templateAlterTask = "";
 
             templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
 
@@ -278,13 +279,12 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME
 AFTER {2}
 AS 
 CALL {0}.{3}({4});
-
-ALTER TASK {0}.{1} RESUME;
 ";
+            templateAlterTask = @"ALTER TASK {0}.{1} RESUME;";
 
             logger.LogInformation($"Metadata to DDL as table");
 
-            string sqlCreateTable, sqlCreateSproc, sqlCreateView, sqlCreateTask, sqlCreateTaskForce;
+            string sqlCreateTable, sqlCreateSproc, sqlCreateView, sqlCreateTask, sqlCreateTaskForce, sqlAlertTask, sqlAlertTaskForce;
             string dataLocation;
             foreach (SQLMetadata metadata in metadataList)
             {
@@ -293,6 +293,8 @@ ALTER TASK {0}.{1} RESUME;
                 sqlCreateView = "";
                 sqlCreateTask = "";
                 sqlCreateTaskForce = "";
+                sqlAlertTask = "";
+                sqlAlertTaskForce = "";
                 dataLocation = null;
 
                 if (string.IsNullOrEmpty(metadata.viewDefinition))
@@ -357,6 +359,11 @@ ALTER TASK {0}.{1} RESUME;
                         this.snowflakeWarehouse                                 //5 Snowflake warehouse
                         );
 
+                    sqlAlertTask = string.Format(templateAlterTask,
+                        this.snowflakeDBSchema,                                 //0 schema
+                        "TK_COPY_" + metadata.entityName.ToUpper()              //1 task name
+                        );
+
                     sqlCreateTaskForce = string.Format(templateCreateTask,
                         this.snowflakeDBSchema,
                         "TK_COPY_" + metadata.entityName.ToUpper() + "_" + snowflakeNameFullReloadString,
@@ -364,6 +371,11 @@ ALTER TASK {0}.{1} RESUME;
                         "SP_COPY_" + metadata.entityName.ToUpper(),
                         "TRUE",
                         this.snowflakeWarehouse
+                        );
+
+                    sqlAlertTaskForce = string.Format(templateAlterTask,
+                        this.snowflakeDBSchema,                                                                         //0 schema
+                        "TK_COPY_" + metadata.entityName.ToUpper() + "_" + snowflakeNameFullReloadString                //1 task name
                         );
 
                     dataLocation = metadata.dataLocation;
