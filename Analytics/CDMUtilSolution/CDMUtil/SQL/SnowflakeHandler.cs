@@ -255,11 +255,11 @@ BEGIN
     IF ({6} = TRUE) THEN
         TRUNCATE TABLE {0}.{7};
         COPY INTO {0}.{7}({2})
-        FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T)
+        FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} (PATTERN => '.*.csv') AS T)
         FORCE=TRUE;
     ELSE
         COPY INTO {0}.{7}({2})
-        FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} AS T);
+        FROM (SELECT {3}, METADATA$FILENAME, METADATA$FILE_ROW_NUMBER FROM @{4}/{5} (PATTERN => '.*.csv') AS T);
     END IF;
 
     SELECT COUNT(1) INTO :ROW_COUNT FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
@@ -336,7 +336,7 @@ CALL {0}.{3}({4});
                         columnNames,                                            //2 table columns
                         columnNamesSnowfalkeStage,                              //3 Snowflake stage columns, e.g. $1, $2 etc...
                         this.snowflakeExternalStageName,                        //4 Snowflake stage
-                        metadata.dataLocation,                                  //5 Azure location for the data files
+                        metadata.dataLocation.Replace("*.csv", ""),             //5 Azure location for the data folder
                         SnowflakeHandler.snowflakeNameFullReloadString,         //6 object name suffix, FULL_RELOAD
                         metadata.entityName.ToUpper()                           //7 table name
                         );
