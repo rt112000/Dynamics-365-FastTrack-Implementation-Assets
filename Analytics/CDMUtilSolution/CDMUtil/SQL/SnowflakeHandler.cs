@@ -397,7 +397,9 @@ CALL {0}.{3}({4});
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Procedure", DataLocation = dataLocation, Statement = sqlCreateSproc });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create View", DataLocation = dataLocation, Statement = sqlCreateView });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Task", DataLocation = dataLocation, Statement = sqlCreateTask });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Resume Task", DataLocation = dataLocation, Statement = sqlAlertTask });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Forced Task", DataLocation = dataLocation, Statement = sqlCreateTaskForce });
+                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Resume Forced Task", DataLocation = dataLocation, Statement = sqlAlertTaskForce });
                     }
                 }
             }
