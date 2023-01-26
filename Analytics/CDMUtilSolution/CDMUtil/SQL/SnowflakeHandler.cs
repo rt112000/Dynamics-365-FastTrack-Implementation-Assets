@@ -464,12 +464,12 @@ CALL {0}.{3}({4});
                 && attribute.constantValueList != null)
             {
                 var constantValues = attribute.constantValueList.ConstantValues;
-                sqlColumnNames += $"{attributeNameModified}, CASE {attribute.name}";
+                sqlColumnNames += $"{attributeNameModified}, CASE {attribute.name.ToUpper()}";
                 foreach (var constantValueList in constantValues)
                 {
                     sqlColumnNames += $"{ " WHEN " + constantValueList[3] + " THEN '" + constantValueList[2]}'";
                 }
-                sqlColumnNames += $" END AS {attribute.name}_LABEL";
+                sqlColumnNames += $" END AS {attribute.name.ToUpper()}_LABEL";
             }
             else
             {
