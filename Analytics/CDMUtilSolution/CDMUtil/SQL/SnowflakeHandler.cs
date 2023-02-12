@@ -276,7 +276,7 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME
 
             // Task run after the main task.
             templateCreateTask = @"CREATE OR REPLACE TASK {0}.{1} WAREHOUSE = {5}
-AFTER {2}
+AFTER {0}.{2}
 AS 
 CALL {0}.{3}({4});
 ";
