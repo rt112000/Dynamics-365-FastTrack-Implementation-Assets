@@ -154,17 +154,45 @@ namespace CDMUtil.Snowflake
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateExternalStage", Statement = statement });
 
+            // Create sp to update metadata view for current files in the data lake.
+            template = @"CREATE OR REPLACE PROCEDURE {0}.{1}()
+RETURNS INTEGER
+LANGUAGE SQL
+AS
+DECLARE ROW_COUNT INTEGER := 0;
+BEGIN
+    CREATE OR REPLACE TRANSIENT TABLE {0}.{2}
+    AS
+    SELECT DISTINCT METADATA$FILENAME AS METADATA_FILENAME, SYSDATE() AS ODS_LOAD_DATETIME_UTC FROM @{3} (PATTERN => '.*.csv') AS T;
+    
+    CREATE OR REPLACE VIEW {4}
+    AS
+    SELECT * FROM {0}.{2};
+
+    SELECT COUNT(1) INTO :ROW_COUNT FROM {0}.{2};
+    RETURN ROW_COUNT;
+END;";
+            statement = string.Format(template,
+                this.snowflakeDBSchema,
+                "SP_UPDATE_METADATA_DATA_LAKE_FILE_LIST",
+                "METADATA_DATA_LAKE_FILE_LIST",
+                this.snowflakeExternalStageName,
+                "METADATA_DATA_LAKE_FILE_LIST_VW"
+                );
+            sqldbprep.Add(new SQLStatement { EntityName = "CreateSP_UPDATE_METADATA_DATA_LAKE_FILE_LIST", Statement = statement });
+
             // Create main task
             // PLEASE RESUME THE TASK MANUALLY IN SNOWFLAKE !!!!!!!!!!
             // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            template = @"CREATE TASK IF NOT EXISTS {0}.{1}
+            template = @"CREATE OR REPLACE TASK {0}.{1}
 WAREHOUSE = {2}
 AS
-SELECT CURRENT_TIMESTAMP;";
+CALL {0}.{3}();";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 SnowflakeHandler.snowflakeMainTaskName,
-                this.snowflakeWarehouse
+                this.snowflakeWarehouse,
+                "SP_UPDATE_METADATA_DATA_LAKE_FILE_LIST"
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateMainTask", Statement = statement });
 
@@ -172,7 +200,8 @@ SELECT CURRENT_TIMESTAMP;";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 SnowflakeHandler.snowflakeMainTaskFullReloadName,
-                this.snowflakeWarehouse
+                this.snowflakeWarehouse,
+                "SP_UPDATE_METADATA_DATA_LAKE_FILE_LIST"
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateMainTaskFullReload", Statement = statement });
 
