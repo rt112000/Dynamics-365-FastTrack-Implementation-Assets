@@ -181,18 +181,52 @@ END;";
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateSP_UPDATE_METADATA_DATA_LAKE_FILE_LIST", Statement = statement });
 
+            // Create sp main to call all copy sp.
+            template = @"CREATE OR REPLACE PROCEDURE {0}.{1}(FULL_RELOAD BOOLEAN)
+RETURNS INTEGER
+AS
+DECLARE
+c1 CURSOR FOR
+    SELECT PROCEDURE_NAME
+    FROM INFORMATION_SCHEMA.PROCEDURES
+    WHERE PROCEDURE_SCHEMA = '{0}'
+        AND PROCEDURE_NAME LIKE 'SP_COPY%'
+        AND PROCEDURE_NAME <> 'SP_COPY_MAIN'
+    ORDER BY PROCEDURE_NAME;
+command VARCHAR;
+BEGIN
+    CALL SP_UPDATE_METADATA_DATA_LAKE_FILE_LIST();
+
+    FOR record in c1 DO
+        command := 'CALL ' || record.PROCEDURE_NAME;
+        IF(FULL_RELOAD = TRUE) THEN
+            command := command || '(TRUE)';
+        ELSE
+            command := command || '(FALSE)';
+        END IF;
+
+        EXECUTE IMMEDIATE command;
+    END FOR;
+END;";
+            statement = string.Format(template,
+                this.snowflakeDBSchema,
+                "SP_COPY_MAIN"
+                );
+            sqldbprep.Add(new SQLStatement { EntityName = "CreateSP_COPY_MAIN", Statement = statement });
+
             // Create main task
             // PLEASE RESUME THE TASK MANUALLY IN SNOWFLAKE !!!!!!!!!!
             // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             template = @"CREATE OR REPLACE TASK {0}.{1}
 WAREHOUSE = {2}
 AS
-CALL {0}.{3}();";
+CALL {0}.{3}({4});";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 SnowflakeHandler.snowflakeMainTaskName,
                 this.snowflakeWarehouse,
-                "SP_UPDATE_METADATA_DATA_LAKE_FILE_LIST"
+                "SP_COPY_MAIN",
+                "FALSE"
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateMainTask", Statement = statement });
 
@@ -201,7 +235,8 @@ CALL {0}.{3}();";
                 this.snowflakeDBSchema,
                 SnowflakeHandler.snowflakeMainTaskFullReloadName,
                 this.snowflakeWarehouse,
-                "SP_UPDATE_METADATA_DATA_LAKE_FILE_LIST"
+                "SP_COPY_MAIN",
+                "TRUE"
                 );
             sqldbprep.Add(new SQLStatement { EntityName = "CreateMainTaskFullReload", Statement = statement });
 
@@ -306,6 +341,11 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME
             // Task run after the main task.
             templateCreateTask = @"CREATE OR REPLACE TASK {0}.{1} WAREHOUSE = {5}
 AFTER {0}.{2}
+AS 
+CALL {0}.{3}({4});
+";
+            // Task created without dependencies on the main task.
+            templateCreateTask = @"CREATE OR REPLACE TASK {0}.{1} WAREHOUSE = {5}
 AS 
 CALL {0}.{3}({4});
 ";
@@ -426,9 +466,10 @@ CALL {0}.{3}({4});
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Procedure", DataLocation = dataLocation, Statement = sqlCreateSproc });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create View", DataLocation = dataLocation, Statement = sqlCreateView });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Task", DataLocation = dataLocation, Statement = sqlCreateTask });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Resume Task", DataLocation = dataLocation, Statement = sqlAlertTask });
+                        // Commented out as the tasks won't have a parent task as changing to use SP_COPY_MAIN.
+                        //sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Resume Task", DataLocation = dataLocation, Statement = sqlAlertTask });
                         sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Create Forced Task", DataLocation = dataLocation, Statement = sqlCreateTaskForce });
-                        sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Resume Forced Task", DataLocation = dataLocation, Statement = sqlAlertTaskForce });
+                        //sqlStatements.Add(new SQLStatement() { EntityName = metadata.entityName.ToUpper() + ": Resume Forced Task", DataLocation = dataLocation, Statement = sqlAlertTaskForce });
                     }
                 }
             }

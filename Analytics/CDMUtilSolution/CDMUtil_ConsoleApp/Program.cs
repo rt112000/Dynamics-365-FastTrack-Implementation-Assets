@@ -51,6 +51,8 @@ namespace CDMUtil
                 }
                 else if ((!String.IsNullOrEmpty(c.targetSnowflakeDbConnectionString)))
                 {
+                    if (c.targetSnowflakeDbSchema != "dbo")
+                        c.synapseOptions.schema = c.targetSnowflakeDbSchema;
                     SnowflakeHandler.executeSnowflake(c, metadataList, logger);
                 }
                 else
