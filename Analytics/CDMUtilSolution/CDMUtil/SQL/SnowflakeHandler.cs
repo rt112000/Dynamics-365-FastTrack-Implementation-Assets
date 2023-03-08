@@ -331,11 +331,19 @@ BEGIN
 END
 ";
 
-            templateCreateView = @"CREATE OR REPLACE VIEW {0}.{1}
+            if (this.c.rootFolder.Substring(0, 6).ToUpper() == "TABLES")
+                templateCreateView = @"CREATE OR REPLACE VIEW {0}.{1}
 AS
 SELECT {2}
 FROM {0}.{3}
-QUALIFY ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME DESC) = 1;
+QUALIFY DENSE_RANK() OVER (PARTITION BY METADATA_FILENAME ORDER BY ODS_LOAD_DATETIME_UTC DESC) = 1;
+";
+            else
+                templateCreateView = @"CREATE OR REPLACE VIEW {0}.{1}
+AS
+SELECT {2}
+FROM {0}.{3}
+QUALIFY ROW_NUMBER() OVER (PARTITION BY RECID ORDER BY DATALAKEMODIFIED_DATETIME DESC, ODS_LOAD_DATETIME_UTC DESC) = 1;
 ";
 
             // Task run after the main task.
