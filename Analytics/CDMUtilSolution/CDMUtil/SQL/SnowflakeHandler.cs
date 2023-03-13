@@ -219,6 +219,7 @@ END;";
             // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             template = @"CREATE OR REPLACE TASK {0}.{1}
 WAREHOUSE = {2}
+SCHEDULE = 'USING CRON 2 0 * * * Pacific/Auckland'
 AS
 CALL {0}.{3}({4});";
             statement = string.Format(template,
