@@ -33,11 +33,12 @@ namespace CDMUtil.Snowflake
         private ILogger logger;
         private IDbConnection conn;
         private bool snowflakeDryRun; //Log the Snowflake statement only without execution.
+        private bool snowflakeSetupDb;
         private string snowflakeDBSchema;
         private string snowflakeWarehouse;
         private string snowflakeExternalStageName;
         private string snowflakeFileFormatName;
-        private string snowflakeExistingStorageIntegrationNameWithSchema;
+        private string snowflakeExistingStorageIntegrationName;
         private const string snowflakeMainTaskName = "TK_COPY_MAIN";
         private const string snowflakeNameFullReloadString = "FULL_RELOAD";
         private const string snowflakeMainTaskFullReloadName = snowflakeMainTaskName + "_" + snowflakeNameFullReloadString; // with force option in the copy commands.
@@ -49,10 +50,11 @@ namespace CDMUtil.Snowflake
             this.c = c;
 
             this.snowflakeDryRun = Convert.ToBoolean(c.targetSnowflakeDryRun);
+            this.snowflakeSetupDb = Convert.ToBoolean(c.targetSnowflakeSetupDb);
             this.SnowflakeConnectionStr = c.targetSnowflakeDbConnectionString;
             this.snowflakeDBSchema = c.targetSnowflakeDbSchema;
             this.snowflakeWarehouse = c.targetSnowflakeWarehouse;
-            this.snowflakeExistingStorageIntegrationNameWithSchema = c.targetSnowflakeExistingStorageIntegrationNameWithSchema;
+            this.snowflakeExistingStorageIntegrationName = c.targetSnowflakeExistingStorageIntegrationName;
             this.azureDataLakeFileFormatName = "CSV";
             this.azureDatalakeRootFolder = c.synapseOptions.location.ToUpper();
             // Value would be something like dynamics365_financeandoperations_xxxx_tst_sandbox_EDS
@@ -101,7 +103,9 @@ namespace CDMUtil.Snowflake
             logger.Log(LogLevel.Information, "Executing DDL");
             try
             {
-                handler.executeStatements(setupStatements);
+                if(handler.snowflakeSetupDb)
+                    handler.executeStatements(setupStatements);
+
                 handler.executeStatements(statements);
             }
             catch (Exception e)
@@ -148,7 +152,7 @@ namespace CDMUtil.Snowflake
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 this.snowflakeExternalStageName,
-                this.snowflakeExistingStorageIntegrationNameWithSchema,
+                this.snowflakeExistingStorageIntegrationName,
                 this.azureDatalakeRootFolder.Replace("HTTPS", "AZURE"),
                 this.snowflakeFileFormatName
                 );

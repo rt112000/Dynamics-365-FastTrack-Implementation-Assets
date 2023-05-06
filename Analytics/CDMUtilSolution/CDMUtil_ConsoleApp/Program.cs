@@ -177,10 +177,12 @@ namespace CDMUtil
                 AppConfiguration.targetSnowflakeDbSchema = ConfigurationManager.AppSettings.Get("TargetSnowflakeDbSchema");
             if (ConfigurationManager.AppSettings.Get("TargetSnowflakeWarehouse") != null)
                 AppConfiguration.targetSnowflakeWarehouse = ConfigurationManager.AppSettings.Get("TargetSnowflakeWarehouse");
-            if (ConfigurationManager.AppSettings.Get("TargetSnowflakeExistingStorageIntegrationNameWithSchema") != null)
-                AppConfiguration.targetSnowflakeExistingStorageIntegrationNameWithSchema = ConfigurationManager.AppSettings.Get("TargetSnowflakeExistingStorageIntegrationNameWithSchema");
+            if (ConfigurationManager.AppSettings.Get("TargetSnowflakeExistingStorageIntegrationName") != null)
+                AppConfiguration.targetSnowflakeExistingStorageIntegrationName = ConfigurationManager.AppSettings.Get("TargetSnowflakeExistingStorageIntegrationName");
             if (ConfigurationManager.AppSettings.Get("TargetSnowflakeDryRun") != null)
                 AppConfiguration.targetSnowflakeDryRun = ConfigurationManager.AppSettings.Get("TargetSnowflakeDryRun");
+            if (ConfigurationManager.AppSettings.Get("TargetSnowflakeSetupDb") != null)
+                AppConfiguration.targetSnowflakeSetupDb = ConfigurationManager.AppSettings.Get("TargetSnowflakeSetupDb");
 
             return AppConfiguration;
         }
