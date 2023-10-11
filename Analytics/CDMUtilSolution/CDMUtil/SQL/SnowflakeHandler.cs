@@ -135,7 +135,7 @@ namespace CDMUtil.Snowflake
             sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = statement });
 
             // Create file format
-            template = @"CREATE FILE FORMAT IF NOT EXISTS {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ENCODING='UTF-8'";
+            template = @"CREATE FILE FORMAT IF NOT EXISTS {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ENCODING='UTF-8';";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 this.snowflakeFileFormatName,
@@ -147,7 +147,7 @@ namespace CDMUtil.Snowflake
             template = @"CREATE STAGE IF NOT EXISTS {0}.{1}
                 STORAGE_INTEGRATION = {2}
                 URL = '{3}'
-                FILE_FORMAT = {0}.{4}
+                FILE_FORMAT = {0}.{4};
                 ";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
@@ -313,7 +313,7 @@ CALL {0}.{3}({4});";
             string templateCreateTask = "";
             string templateAlterTask = "";
 
-            templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2})";
+            templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2});";
 
             templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.{1}({6} BOOLEAN)
 RETURNS INTEGER
@@ -333,7 +333,7 @@ BEGIN
 
     SELECT COUNT(1) INTO :ROW_COUNT FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
     RETURN ROW_COUNT;
-END
+END;
 ";
 
             if (this.c.rootFolder.Substring(0, 6).ToUpper() == "TABLES")
