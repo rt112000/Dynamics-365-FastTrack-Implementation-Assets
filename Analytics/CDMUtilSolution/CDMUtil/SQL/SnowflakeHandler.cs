@@ -23,6 +23,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Snowflake.Data.Client;
+using System.IO;
 
 namespace CDMUtil.Snowflake
 {
@@ -44,6 +45,7 @@ namespace CDMUtil.Snowflake
         private const string snowflakeMainTaskFullReloadName = snowflakeMainTaskName + "_" + snowflakeNameFullReloadString; // with force option in the copy commands.
         private string azureDataLakeFileFormatName;
         private string azureDatalakeRootFolder;
+        private StreamWriter snowflakeSQLFile;
 
         public SnowflakeHandler(AppConfigurations c, ILogger logger)
         {
@@ -71,6 +73,9 @@ namespace CDMUtil.Snowflake
 
                 this.conn.Open();
             }
+
+            this.snowflakeSQLFile = new StreamWriter("SnowflakeStatements.sql");
+            this.snowflakeSQLFile.AutoFlush = true;
         }
 
         ~SnowflakeHandler()
@@ -135,7 +140,8 @@ namespace CDMUtil.Snowflake
             sqldbprep.Add(new SQLStatement { EntityName = "CreateSchema", Statement = statement });
 
             // Create file format
-            template = @"CREATE FILE FORMAT IF NOT EXISTS {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ENCODING='UTF-8';";
+            template = @"CREATE FILE FORMAT IF NOT EXISTS {0}.{1} TYPE = {2} FIELD_DELIMITER=',' FIELD_OPTIONALLY_ENCLOSED_BY='""' ENCODING='UTF-8';
+";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 this.snowflakeFileFormatName,
@@ -148,7 +154,7 @@ namespace CDMUtil.Snowflake
                 STORAGE_INTEGRATION = {2}
                 URL = '{3}'
                 FILE_FORMAT = {0}.{4};
-                ";
+";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 this.snowflakeExternalStageName,
@@ -175,7 +181,8 @@ BEGIN
 
     SELECT COUNT(1) INTO :ROW_COUNT FROM {0}.{2};
     RETURN ROW_COUNT;
-END;";
+END;
+";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 "SP_UPDATE_METADATA_DATA_LAKE_FILE_LIST",
@@ -211,7 +218,8 @@ BEGIN
 
         EXECUTE IMMEDIATE command;
     END FOR;
-END;";
+END;
+";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 "SP_COPY_MAIN"
@@ -225,7 +233,8 @@ END;";
 WAREHOUSE = {2}
 SCHEDULE = 'USING CRON 2 0 * * * Pacific/Auckland'
 AS
-CALL {0}.{3}({4});";
+CALL {0}.{3}({4});
+";
             statement = string.Format(template,
                 this.snowflakeDBSchema,
                 SnowflakeHandler.snowflakeMainTaskName,
@@ -272,7 +281,8 @@ CALL {0}.{3}({4});";
                         }
                         else
                         {
-                            logger.LogInformation($"Statement:{s.Statement}"); 
+                            logger.LogInformation($"Statement:{s.Statement}");
+                            this.snowflakeSQLFile.WriteLine(s.Statement);
                         }
 
                         logger.LogInformation($"Status:success");
@@ -313,7 +323,8 @@ CALL {0}.{3}({4});";
             string templateCreateTask = "";
             string templateAlterTask = "";
 
-            templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2});";
+            templateCreateTable = @"CREATE OR REPLACE TRANSIENT TABLE {0}.{1} ({2});
+";
 
             templateCreateStoredProcedure = @"CREATE OR REPLACE PROCEDURE {0}.{1}({6} BOOLEAN)
 RETURNS INTEGER
