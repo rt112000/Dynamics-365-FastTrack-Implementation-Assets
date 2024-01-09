@@ -168,16 +168,27 @@ namespace CDMUtil.Snowflake
             template = @"CREATE OR REPLACE PROCEDURE {0}.{1}()
 RETURNS INTEGER
 LANGUAGE SQL
+EXECUTE AS CALLER
 AS
 DECLARE ROW_COUNT INTEGER := 0;
 BEGIN
+    LIST @{0}.{3} PATTERN = '.*.csv';
+
     CREATE OR REPLACE TRANSIENT TABLE {0}.{2}
     AS
-    SELECT DISTINCT METADATA$FILENAME AS METADATA_FILENAME, SYSDATE() AS ODS_LOAD_DATETIME_UTC FROM @{3} (PATTERN => '.*.csv') AS T;
-    
-    CREATE OR REPLACE VIEW {4}
+    SELECT
+        *,
+        SYSDATE() AS ODS_LOAD_DATETIME_UTC
+    FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+
+    CREATE OR REPLACE VIEW {0}.{4}
     AS
-    SELECT * FROM {0}.{2};
+    SELECT
+        SUBSTRING(""name"", POSITION('dynamics365-financeandoperations', ""name"") + LENGTH('dynamics365-financeandoperations/') ) AS METADATA_FILENAME,
+        ""size"" AS SIZE,
+        ""last_modified"" AS LAST_MODIFIED,
+        ODS_LOAD_DATETIME_UTC
+    FROM {0}.{2};
 
     SELECT COUNT(1) INTO :ROW_COUNT FROM {0}.{2};
     RETURN ROW_COUNT;
