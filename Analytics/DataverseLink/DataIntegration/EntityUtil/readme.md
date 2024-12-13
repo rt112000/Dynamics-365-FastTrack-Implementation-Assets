@@ -6,7 +6,7 @@ If the customer would like to leverage Fabric, this tool can be used to create t
 Note: Caution should be taken if data is being used for integration as near-real-time data integrity is not guaranteed. 
 
 ## Prerequisites
-If you are creating the VIEWS within the serverless database or an Azure SQL database, you can use the pipeline available [here](https://github.com/microsoft/Dynamics-365-FastTrack-Implementation-Assets/tree/master/Analytics/DataverseLink/DataIntegration) to generate the database metadata structure that will be used as the basis for the VIEWs.
+If you are creating the VIEWS within the serverless database these steps will help you create the initial virtual data warehouse structure that will be used as the basis for the VIEWs. [Virtual data warehouse](https://github.com/microsoft/Dynamics-365-FastTrack-Implementation-Assets/blob/master/Analytics/DataverseLink/VirtualDatawarehouse/readme.md).
 
 ## Steps to execute EntityUtil:
 1.	Copy files to a location where they will be run.
@@ -24,6 +24,14 @@ If you are creating the VIEWS within the serverless database or an Azure SQL dat
     Select 5 to create the inherited tables in Fabric or the serverless lake replica database.
 
   	Select Q to quit.
+
+ ## Dynamics Bites
+ [Introduction to EntityUtil and generating entity schemas](https://youtu.be/_A7pPN73QpA).
+
+ [Create a virtual data warehouse and use EntityUtil to create complex entities](https://youtu.be/ARb19RTns0Q).
+
+ [Use EntityUtil to create complex entites in the lake database](https://youtu.be/GgrgIsfYEdg).
+
 
 ## Config.json parameters explained
 
