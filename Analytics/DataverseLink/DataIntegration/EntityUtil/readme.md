@@ -1,9 +1,14 @@
-## Overview:
+## Using EntityUtil to create Entity shapes in Synapse and Fabric:
 The utility provided and outlined below is built to assist in migrating from BYOD to Synapse Link. As known there are [rules](https://learn.microsoft.com/en-us/dynamics365/fin-ops-core/dev-itpro/data-entities/rowversion-change-track#enable-row-version-change-tracking-for-data-entities)  that need to be followed by entities so that they can be exported via Synapse Link. As not all entities support these rules this utility has been created to recreate those entities that are not supported as views in an Azure Synapse database or an Azure SQL database. 
 
 If the customer would like to leverage Fabric, this tool can be used to create the entities as VIEWS within Fabric. However it is necessary to create all of the inherited tables, as views, within Fabric first, therefore it is necessary to run "Select 5" before "Select 2".
  
 Note: Caution should be taken if data is being used for integration as near-real-time data integrity is not guaranteed. 
+
+### Complex entity performance
+Some of the complex enities have many joins and underlying syntax that can result in poor performance when run on severless architecture. Performance may vary between customers based on the volume of data. If you are impacted by the poor performance it is recommended that you revisit the business requirements and investigate if there is an alternative entity available to support the requirements or if you are able to create your own views based on the underlying tables.
+<br>Entities with known performance issues include: <br>
+InventWarehouseOnHandV2Entity
 
 ## Prerequisites
 If you are creating the VIEWS within the serverless database these steps will help you create the initial virtual data warehouse structure that will be used as the basis for the VIEWs. [Virtual data warehouse](https://github.com/microsoft/Dynamics-365-FastTrack-Implementation-Assets/blob/master/Analytics/DataverseLink/VirtualDatawarehouse/readme.md).
